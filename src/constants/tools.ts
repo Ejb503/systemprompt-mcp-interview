@@ -240,7 +240,7 @@ export const TOOLS: Tool[] = [
             "Detailed user instructions for an AI system to generate a HTML email. Should be a description of the email contents used to guide AI to generate the content.",
         },
       },
-      required: ["to", "userInstructions"],
+      required: ["draftId", "userInstructions"],
     },
   },
 
