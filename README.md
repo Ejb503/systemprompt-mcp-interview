@@ -26,6 +26,12 @@ Send emails
 Search emails
 Read emails
 
+## Installation
+
+This server requires GOOGLE_CREDENTIALS and GOOGLE_TOKEN environment variables to be set. These must be base64 encoded strings of the credentials and token. There is a script to help with this in the [multimodal-mcp-client](https://github.com/Ejb503/multimodal-mcp-client) repository.
+
+After generating your base64 encoded strings, you can run the server with npx.
+
 ## Features
 
 #### Core Functionality

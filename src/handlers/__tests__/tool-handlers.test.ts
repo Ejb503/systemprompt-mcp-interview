@@ -1,7 +1,10 @@
 import { jest, describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import type { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import { handleToolCall } from "../tool-handlers.js";
-import type { SystempromptPromptResponse } from "../../types/systemprompt.js";
+import type {
+  SystempromptPromptResponse,
+  SystempromptUserStatusResponse,
+} from "../../types/systemprompt.js";
 
 interface UserStatus {
   user: {
@@ -68,56 +71,80 @@ jest.mock("../sampling.js", () => ({
 }));
 
 // Mock SystemPromptService
-type MockFunction<T> = jest.Mock<Promise<T>, []>;
-
-interface MockSystemPromptService {
-  fetchUserStatus: MockFunction<UserStatus>;
-  getAllPrompts: MockFunction<SystempromptPromptResponse[]>;
-  listBlocks: MockFunction<SystempromptPromptResponse[]>;
-  listAgents: MockFunction<SystempromptPromptResponse[]>;
-  deletePrompt: MockFunction<void>;
-  deleteBlock: MockFunction<void>;
-}
-
-const mockSystemPromptService: MockSystemPromptService = {
-  fetchUserStatus: jest.fn().mockResolvedValue({
-    user: {
-      name: "Test User",
+const mockUserStatus: SystempromptUserStatusResponse = {
+  user: {
+    id: "user123",
+    uuid: "uuid123",
+    name: "Test User",
+    email: "test@example.com",
+    roles: ["user"],
+    paddle_id: "paddle123",
+  },
+  content: {
+    prompt: 0,
+    artifact: 0,
+    block: 0,
+    conversation: 0,
+  },
+  usage: {
+    ai: {
+      execution: 0,
+      token: 0,
+    },
+    api: {
+      generation: 0,
+    },
+  },
+  billing: {
+    customer: {
+      id: "cust123",
+      name: null,
       email: "test@example.com",
-      roles: ["user"],
-    },
-    billing: {
-      customer: {
-        id: "cust123",
-        email: "test@example.com",
-        status: "active",
+      marketingConsent: false,
+      status: "active",
+      customData: null,
+      locale: "en",
+      createdAt: {
+        date: "2024-01-01T00:00:00Z",
+        timezone_type: 3,
+        timezone: "UTC",
       },
-      subscription: [
-        {
-          id: "sub123",
-          status: "active",
-          currency_code: "USD",
-          billing_cycle: {
-            frequency: 1,
-            interval: "month",
-          },
-          current_billing_period: {
-            starts_at: "2024-01-01",
-            ends_at: "2024-02-01",
-          },
-          items: [
-            {
-              product: { name: "Test Product" },
-              price: {
-                unit_price: { amount: "10.00", currency_code: "USD" },
-              },
-            },
-          ],
-        },
-      ],
+      updatedAt: {
+        date: "2024-01-01T00:00:00Z",
+        timezone_type: 3,
+        timezone: "UTC",
+      },
+      importMeta: null,
     },
-    api_key: "test-api-key",
-  }),
+    subscription: [
+      {
+        id: "sub123",
+        status: "active",
+        currency_code: "USD",
+        billing_cycle: {
+          frequency: 1,
+          interval: "month",
+        },
+        current_billing_period: {
+          starts_at: "2024-01-01",
+          ends_at: "2024-02-01",
+        },
+        items: [
+          {
+            product: { name: "Test Product" },
+            price: {
+              unit_price: { amount: "10.00", currency_code: "USD" },
+            },
+          },
+        ],
+      },
+    ],
+  },
+  api_key: "test-api-key",
+};
+
+const mockSystemPromptService = {
+  fetchUserStatus: jest.fn().mockResolvedValue(mockUserStatus),
   getAllPrompts: jest.fn().mockResolvedValue([]),
   listBlocks: jest.fn().mockResolvedValue([]),
   listAgents: jest.fn().mockResolvedValue([]),
@@ -200,6 +227,70 @@ describe("Tool Handlers", () => {
           },
         };
         await expect(handleToolCall(request)).rejects.toThrow("Failed to fetch user status");
+      });
+    });
+
+    describe("Resource Operations", () => {
+      it("should handle systemprompt_fetch_resources", async () => {
+        const result = await handleToolCall({
+          method: "tools/call",
+          params: {
+            name: "systemprompt_fetch_resources",
+            params: {},
+          },
+        });
+        expect(mockSystemPromptService.getAllPrompts).toHaveBeenCalled();
+        expect(mockSystemPromptService.listBlocks).toHaveBeenCalled();
+        expect(mockSystemPromptService.listAgents).toHaveBeenCalled();
+        expect(result.content[0].type).toBe("text");
+        expect(result.content[0].text).toContain("Resources");
+      });
+
+      it("should handle delete resource failure", async () => {
+        mockSystemPromptService.deletePrompt.mockRejectedValueOnce(
+          new Error("Failed to delete prompt"),
+        );
+        mockSystemPromptService.deleteBlock.mockRejectedValueOnce(
+          new Error("Failed to delete block"),
+        );
+        await expect(
+          handleToolCall({
+            method: "tools/call",
+            params: {
+              name: "systemprompt_delete_resource",
+              arguments: {
+                id: "nonexistent123",
+              },
+            },
+          }),
+        ).rejects.toThrow("Failed to delete resource with ID nonexistent123");
+      });
+    });
+
+    describe("Error Handling", () => {
+      it("should handle invalid tool name", async () => {
+        await expect(
+          handleToolCall({
+            method: "tools/call",
+            params: {
+              name: "invalid_tool",
+              params: {},
+            },
+          }),
+        ).rejects.toThrow("Unknown tool: invalid_tool");
+      });
+
+      it("should handle service errors", async () => {
+        mockSystemPromptService.fetchUserStatus.mockRejectedValueOnce(new Error("Service error"));
+        await expect(
+          handleToolCall({
+            method: "tools/call",
+            params: {
+              name: "systemprompt_heartbeat",
+              params: {},
+            },
+          }),
+        ).rejects.toThrow("Service error");
       });
     });
   });
@@ -418,24 +509,6 @@ describe("Resource Operations", () => {
         },
       }),
     ).rejects.toThrow("Invalid resource type: invalid");
-  });
-
-  it("should handle delete resource failure", async () => {
-    mockSystemPromptService.deletePrompt.mockRejectedValueOnce(
-      new Error("Failed to delete prompt"),
-    );
-    mockSystemPromptService.deleteBlock.mockRejectedValueOnce(new Error("Failed to delete block"));
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_delete_resource",
-          arguments: {
-            id: "nonexistent123",
-          },
-        },
-      }),
-    ).rejects.toThrow("Failed to delete resource with ID nonexistent123");
   });
 
   it("should handle missing id for delete resource", async () => {
