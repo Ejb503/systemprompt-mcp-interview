@@ -1,10 +1,10 @@
 {
-  "name": "systemprompt-mcp-google",
-  "version": "1.0.1",
-  "description": "A specialized Model Context Protocol (MCP) server that integrates with Google services (Gmail, Calendar, etc.) through MCP. This server enables seamless integration of Google services into your AI workflows.",
+  "name": "systemprompt-mcp-gmail",
+  "version": "1.0.0",
+  "description": "A specialized Model Context Protocol (MCP) server that enables you to search, read, delete and send emails from your Gmail account, leveraging an AI Agent to help with each operation.",
   "type": "module",
   "bin": {
-    "systemprompt-mcp-google": "./build/index.js"
+    "systemprompt-mcp-gmail": "./build/index.js"
   },
   "files": [
     "build"
@@ -14,14 +14,14 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
-    "test": "jest --detectOpenHandles --forceExit --testTimeout=10000",
+    "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "auth-google": "node --loader ts-node/esm scripts/auth-google.ts"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Ejb503/systemprompt-mcp-google"
+    "url": "https://github.com/Ejb503/systemprompt-mcp-gmail"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
@@ -59,13 +59,12 @@
     "model-context-protocol",
     "google",
     "gmail",
-    "calendar",
     "oauth"
   ],
   "author": "Ejb503",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/Ejb503/systemprompt-mcp-google/issues"
+    "url": "https://github.com/Ejb503/systemprompt-mcp-gmail/issues"
   },
   "homepage": "https://systemprompt.io",
   "engines": {
