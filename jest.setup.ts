@@ -1,8 +1,5 @@
 import { jest } from "@jest/globals";
-import {
-  createMockResponse,
-  MockResponseOptions,
-} from "./src/__tests__/test-utils";
+import { createMockResponse, MockResponseOptions } from "./src/__tests__/test-utils";
 
 // Define global types for our custom matchers and utilities
 declare global {
@@ -19,21 +16,17 @@ declare global {
 }
 
 // Mock fetch globally with a more flexible implementation
-const mockFetch = jest.fn(
-  (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    // Default success response
-    return Promise.resolve(createMockResponse({}));
-  }
-);
+const mockFetch = jest.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  // Default success response
+  return Promise.resolve(createMockResponse({}));
+});
 
 // Type assertion for global fetch mock
 global.fetch = mockFetch;
 
 // Utility to set up fetch mock responses
 global.mockFetchResponse = (data: any, options: MockResponseOptions = {}) => {
-  mockFetch.mockImplementationOnce(() =>
-    Promise.resolve(createMockResponse(data, options))
-  );
+  mockFetch.mockImplementationOnce(() => Promise.resolve(createMockResponse(data, options)));
 };
 
 // Utility to set up fetch mock error
@@ -48,23 +41,39 @@ expect.extend({
     const pass = date instanceof Date && !isNaN(date.getTime());
     return {
       pass,
-      message: () =>
-        `expected ${received} to ${pass ? "not " : ""}be a valid date string`,
+      message: () => `expected ${received} to ${pass ? "not " : ""}be a valid date string`,
     };
   },
   toBeValidUUID(received: string) {
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const pass = uuidRegex.test(received);
     return {
       pass,
-      message: () =>
-        `expected ${received} to ${pass ? "not " : ""}be a valid UUID`,
+      message: () => `expected ${received} to ${pass ? "not " : ""}be a valid UUID`,
     };
   },
 });
 
-// Reset all mocks before each test
+// Increase the default timeout for all tests
+jest.setTimeout(10000);
+
+// Clear all mocks before each test
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+// Reset modules after each test
+afterEach(() => {
+  jest.resetModules();
+});
+
+// Clean up any remaining handles after all tests
+afterAll(() => {
+  jest.useRealTimers();
+});
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled Promise Rejection:", error);
+  process.exit(1);
 });

@@ -1,13 +1,9 @@
 import { SamplingPrompt } from "../types/sampling.js";
+import { EMAIL_SEND_INSTRUCTIONS } from "./instructions.js";
 import {
-  EMAIL_SEARCH_INSTRUCTIONS,
-  EMAIL_DRAFT_INSTRUCTIONS,
-  EMAIL_SEND_INSTRUCTIONS,
-} from "./instructions.js";
-import {
-  EMAIL_SEARCH_RESPONSE_SCHEMA,
-  EMAIL_DRAFT_RESPONSE_SCHEMA,
   EMAIL_SEND_RESPONSE_SCHEMA,
+  EMAIL_REPLY_RESPONSE_SCHEMA,
+  DRAFT_EMAIL_RESPONSE_SCHEMA,
 } from "../types/sampling-schemas.js";
 
 const promptArgs = [
@@ -18,65 +14,23 @@ const promptArgs = [
   },
 ];
 
-// Email Search Prompt
-export const SEARCH_EMAIL_PROMPT: SamplingPrompt = {
-  name: "SearchEmail",
-  description: "Searches through emails based on user criteria",
-  arguments: promptArgs,
-  messages: [
-    {
-      role: "assistant",
-      content: {
-        type: "text",
-        text: EMAIL_SEARCH_INSTRUCTIONS,
-      },
-    },
-    {
-      role: "user",
-      content: {
-        type: "text",
-        text: `<input><userInstructions>{{userInstructions}}</userInstructions></input>`,
-      },
-    },
-  ],
-  _meta: {
-    callback: "search_email",
-    responseSchema: EMAIL_SEARCH_RESPONSE_SCHEMA,
-  },
-};
-
-// Email Draft Prompt
-export const CREATE_EMAIL_DRAFT_PROMPT: SamplingPrompt = {
-  name: "CreateEmailDraft",
-  description: "Creates a new email draft based on user instructions",
-  arguments: promptArgs,
-  messages: [
-    {
-      role: "assistant",
-      content: {
-        type: "text",
-        text: EMAIL_DRAFT_INSTRUCTIONS,
-      },
-    },
-    {
-      role: "user",
-      content: {
-        type: "text",
-        text: `<input><userInstructions>{{userInstructions}}</userInstructions></input>`,
-      },
-    },
-  ],
-  _meta: {
-    callback: "create_email_draft",
-    responseSchema: EMAIL_DRAFT_RESPONSE_SCHEMA,
-  },
-};
-
 // Email Send Prompt
 export const SEND_EMAIL_PROMPT: SamplingPrompt = {
   name: "gmail_send_email",
-  description: "Sends an email based on user instructions",
-  arguments: promptArgs,
+  description: "Sends an email or reply based on user instructions",
+  arguments: [
+    ...promptArgs,
+    {
+      name: "to",
+      description: "Recipient email address(es)",
+      required: true,
+    },
+    {
+      name: "messageId",
+      description: "Optional message ID to reply to",
+      required: false,
+    },
+  ],
   messages: [
     {
       role: "assistant",
@@ -89,7 +43,11 @@ export const SEND_EMAIL_PROMPT: SamplingPrompt = {
       role: "user",
       content: {
         type: "text",
-        text: `<input><userInstructions>{{userInstructions}}</userInstructions><to>{{to}}</to></input>`,
+        text: `<input>
+          <userInstructions>{{userInstructions}}</userInstructions>
+          <to>{{to}}</to>
+          {{#messageId}}<replyTo>{{messageId}}</replyTo>{{/messageId}}
+        </input>`,
       },
     },
   ],
@@ -99,5 +57,148 @@ export const SEND_EMAIL_PROMPT: SamplingPrompt = {
   },
 };
 
+// Email Send Prompt
+export const REPLY_EMAIL_PROMPT: SamplingPrompt = {
+  name: "gmail_reply_email",
+  description: "Sends an email or reply based on user instructions",
+  arguments: [
+    ...promptArgs,
+    {
+      name: "to",
+      description: "Recipient email address(es)",
+      required: true,
+    },
+    {
+      name: "messageId",
+      description: "Optional message ID to reply to",
+      required: false,
+    },
+  ],
+  messages: [
+    {
+      role: "assistant",
+      content: {
+        type: "text",
+        text: EMAIL_SEND_INSTRUCTIONS,
+      },
+    },
+    {
+      role: "assistant",
+      content: {
+        type: "text",
+        text: `<History>
+          <threadContent>{{threadContent}}</threadContent>
+        </History>`,
+      },
+    },
+    {
+      role: "user",
+      content: {
+        type: "text",
+        text: `<input>
+          <userInstructions>{{userInstructions}}</userInstructions>
+          <to>{{to}}</to>
+          <replyTo>{{messageId}}</replyTo>
+        </input>`,
+      },
+    },
+  ],
+  _meta: {
+    callback: "reply_email",
+    responseSchema: EMAIL_REPLY_RESPONSE_SCHEMA,
+  },
+};
+
+// Email Send Prompt
+export const REPLY_DRAFT_PROMPT: SamplingPrompt = {
+  name: "gmail_reply_draft",
+  description: "Replies to a draft email based on user instructions",
+  arguments: [
+    ...promptArgs,
+    {
+      name: "to",
+      description: "Recipient email address(es)",
+      required: true,
+    },
+    {
+      name: "messageId",
+      description: "Optional message ID to reply to",
+      required: false,
+    },
+  ],
+  messages: [
+    {
+      role: "assistant",
+      content: {
+        type: "text",
+        text: EMAIL_SEND_INSTRUCTIONS,
+      },
+    },
+    {
+      role: "user",
+      content: {
+        type: "text",
+        text: `<input>
+          <userInstructions>{{userInstructions}}</userInstructions>
+          <to>{{to}}</to>
+          {{#messageId}}<replyTo>{{messageId}}</replyTo>{{/messageId}}
+        </input>`,
+      },
+    },
+  ],
+  _meta: {
+    callback: "reply_draft",
+    responseSchema: DRAFT_EMAIL_RESPONSE_SCHEMA,
+  },
+};
+
+// Email Send Prompt
+export const EDIT_DRAFT_PROMPT: SamplingPrompt = {
+  name: "gmail_edit_draft",
+  description: "Edits a draft email based on user instructions",
+  arguments: [
+    ...promptArgs,
+    {
+      name: "to",
+      description: "Recipient email address(es)",
+      required: true,
+    },
+    {
+      name: "messageId",
+      description: "Optional message ID to reply to",
+      required: false,
+    },
+  ],
+  messages: [
+    {
+      role: "assistant",
+      content: {
+        type: "text",
+        text: EMAIL_SEND_INSTRUCTIONS,
+      },
+    },
+    {
+      role: "user",
+      content: {
+        type: "text",
+        text: `<input>
+          <userInstructions>{{userInstructions}}</userInstructions>
+          <to>{{to}}</to>
+          {{#messageId}}<replyTo>{{messageId}}</replyTo>{{/messageId}}
+        </input>`,
+      },
+    },
+  ],
+  _meta: {
+    callback: "edit_draft",
+    responseSchema: DRAFT_EMAIL_RESPONSE_SCHEMA,
+  },
+};
+
 // Export all prompts
-export const PROMPTS = [SEARCH_EMAIL_PROMPT, CREATE_EMAIL_DRAFT_PROMPT, SEND_EMAIL_PROMPT];
+export const PROMPTS = [
+  SEND_EMAIL_PROMPT,
+  REPLY_EMAIL_PROMPT,
+  REPLY_DRAFT_PROMPT,
+  EDIT_DRAFT_PROMPT,
+];

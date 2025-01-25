@@ -6,12 +6,23 @@ import {
   ListToolsResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { TOOLS } from "../constants/tools.js";
-import { ListMessagesArgs, GetMessageArgs, SearchMessagesArgs } from "../types/tool-schemas.js";
+import {
+  ListEmailsArgs,
+  GetEmailArgs,
+  GetDraftArgs,
+  SearchEmailsArgs,
+  SendEmailAIArgs,
+  SendEmailManualArgs,
+  CreateDraftAIArgs,
+  EditDraftAIArgs,
+  ListDraftsArgs,
+  DeleteDraftArgs,
+  TrashMessageArgs,
+} from "../types/tool-schemas.js";
 import { TOOL_ERROR_MESSAGES } from "../constants/tools.js";
 import { sendSamplingRequest } from "./sampling.js";
 import { handleGetPrompt } from "./prompt-handlers.js";
 import { injectVariables } from "../utils/message-handlers.js";
-import { DraftEmailOptions } from "../types/gmail-types.js";
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -38,10 +49,9 @@ export async function handleListTools(request: ListToolsRequest): Promise<ListTo
 export async function handleToolCall(request: CallToolRequest): Promise<CallToolResult> {
   try {
     switch (request.params.name) {
-      // Gmail Tools
-      case "gmail_list_messages": {
+      case "gmail_list_emails": {
         const gmail = new GmailService();
-        const args = request.params.arguments as unknown as ListMessagesArgs;
+        const args = request.params.arguments as unknown as ListEmailsArgs;
         const messages = await gmail.listMessages(args.maxResults);
         return {
           content: [
@@ -53,9 +63,9 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         };
       }
 
-      case "gmail_get_message": {
+      case "gmail_get_email": {
         const gmail = new GmailService();
-        const args = request.params.arguments as unknown as GetMessageArgs;
+        const args = request.params.arguments as unknown as GetEmailArgs;
         const message = await gmail.getMessage(args.messageId);
         return {
           content: [
@@ -67,9 +77,23 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         };
       }
 
-      case "gmail_search_messages": {
+      case "gmail_get_draft": {
         const gmail = new GmailService();
-        const args = request.params.arguments as unknown as SearchMessagesArgs;
+        const args = request.params.arguments as unknown as GetDraftArgs;
+        const draft = await gmail.getDraft(args.draftId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(draft, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "gmail_search_emails": {
+        const gmail = new GmailService();
+        const args = request.params.arguments as unknown as SearchEmailsArgs;
         const messages = await gmail.searchMessages(args.query, args.maxResults);
         return {
           content: [
@@ -81,23 +105,9 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         };
       }
 
-      case "gmail_list_labels": {
-        const gmail = new GmailService();
-        const labels = await gmail.getLabels();
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(labels, null, 2),
-            },
-          ],
-        };
-      }
-      case "gmail_send_email": {
-        const { userInstructions, to } = request.params.arguments as {
-          userInstructions: string;
-          to: string;
-        };
+      case "gmail_send_email_ai": {
+        const args = request.params.arguments as unknown as SendEmailAIArgs;
+        const { userInstructions, to, replyTo } = args;
         if (!userInstructions) {
           throw new Error(
             "Tool call failed: Missing required parameters - userInstructions is required",
@@ -110,11 +120,27 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
 
         validateEmailList(to);
 
+        let threadContent: string | undefined;
+        if (replyTo) {
+          const gmail = new GmailService();
+          const message = await gmail.getMessage(replyTo);
+          threadContent = JSON.stringify(message);
+        }
+
         const prompt = await handleGetPrompt({
           method: "prompts/get",
           params: {
-            name: "gmail_send_email",
-            arguments: { userInstructions, to },
+            name: replyTo ? "gmail_reply_email" : "gmail_send_email",
+            arguments: {
+              userInstructions,
+              to,
+              ...(replyTo && threadContent
+                ? {
+                    messageId: replyTo,
+                    threadContent,
+                  }
+                : {}),
+            },
           },
         });
 
@@ -126,7 +152,16 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
           method: "sampling/createMessage",
           params: {
             messages: prompt.messages.map((msg) =>
-              injectVariables(msg, { userInstructions, to }),
+              injectVariables(msg, {
+                userInstructions,
+                to,
+                ...(replyTo && threadContent
+                  ? {
+                      messageId: replyTo,
+                      threadContent,
+                    }
+                  : {}),
+              }),
             ) as Array<{
               role: "user" | "assistant";
               content: { type: "text"; text: string };
@@ -134,40 +169,181 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             maxTokens: 100000,
             temperature: 0.7,
             _meta: {
-              callback: "send_email",
+              callback: replyTo ? "reply_email" : "send_email",
               responseSchema: prompt._meta.responseSchema,
             },
-            arguments: { userInstructions, to },
+            arguments: { userInstructions, to, ...(replyTo ? { messageId: replyTo } : {}) },
           },
         });
         return {
           content: [
             {
               type: "text",
-              text: `Your request has been received and is being processed, we will notify you when it is complete.`,
+              text: `Your ${replyTo ? "reply" : "email"} request has been received and is being processed, we will notify you when it is complete.`,
             },
           ],
         };
       }
-      case "gmail_create_draft": {
+
+      case "gmail_send_email_manual": {
         const gmail = new GmailService();
-        const args = request.params.arguments as unknown as DraftEmailOptions;
-        const draftId = await gmail.createDraft({
-          to: args.to,
-          subject: args.subject,
-          body: args.body,
-          cc: args.cc,
-          bcc: args.bcc,
-          isHtml: args.isHtml,
-        });
+        const args = request.params.arguments as unknown as SendEmailManualArgs;
+        const { to, subject, body, cc, bcc, isHtml, replyTo } = args;
+
+        validateEmailList(to);
+        if (cc) validateEmailList(cc);
+        if (bcc) validateEmailList(bcc);
+
+        if (replyTo) {
+          await gmail.replyEmail(replyTo, body, isHtml);
+        } else {
+          if (!subject) {
+            throw new Error(
+              "Tool call failed: Missing required parameters - subject is required for new emails",
+            );
+          }
+          await gmail.sendEmail({
+            to,
+            subject,
+            body,
+            cc,
+            bcc,
+            isHtml,
+          });
+        }
+
         return {
           content: [
             {
               type: "text",
               text: JSON.stringify({
-                draftId,
-                status: "Draft created successfully",
+                status: `${replyTo ? "Reply" : "Email"} sent successfully`,
+                to,
               }),
+            },
+          ],
+        };
+      }
+
+      case "gmail_create_draft_ai": {
+        const args = request.params.arguments as unknown as CreateDraftAIArgs;
+        const { userInstructions, to, replyTo } = args;
+        if (!userInstructions) {
+          throw new Error(
+            "Tool call failed: Missing required parameters - userInstructions is required",
+          );
+        }
+
+        if (!to) {
+          throw new Error("Tool call failed: Missing required parameters - to is required");
+        }
+
+        validateEmailList(to);
+
+        if (replyTo) {
+          const gmail = new GmailService();
+          await gmail.getMessage(replyTo);
+        }
+
+        const prompt = await handleGetPrompt({
+          method: "prompts/get",
+          params: {
+            name: replyTo ? "gmail_reply_draft" : "gmail_create_draft",
+            arguments: { userInstructions, to, ...(replyTo ? { messageId: replyTo } : {}) },
+          },
+        });
+
+        if (!prompt._meta?.responseSchema) {
+          throw new Error("Invalid prompt configuration: missing response schema");
+        }
+
+        await sendSamplingRequest({
+          method: "sampling/createMessage",
+          params: {
+            messages: prompt.messages.map((msg) =>
+              injectVariables(msg, {
+                userInstructions,
+                to,
+                ...(replyTo ? { messageId: replyTo } : {}),
+              }),
+            ) as Array<{
+              role: "user" | "assistant";
+              content: { type: "text"; text: string };
+            }>,
+            maxTokens: 100000,
+            temperature: 0.7,
+            _meta: {
+              callback: replyTo ? "reply_draft" : "create_draft",
+              responseSchema: prompt._meta.responseSchema,
+            },
+            arguments: { userInstructions, to, ...(replyTo ? { messageId: replyTo } : {}) },
+          },
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Your draft ${replyTo ? "reply" : "email"} request has been received and is being processed, we will notify you when it is complete.`,
+            },
+          ],
+        };
+      }
+
+      case "gmail_edit_draft_ai": {
+        const args = request.params.arguments as unknown as EditDraftAIArgs;
+        const { draftId, userInstructions } = args;
+        if (!userInstructions) {
+          throw new Error(
+            "Tool call failed: Missing required parameters - userInstructions is required",
+          );
+        }
+
+        if (!draftId) {
+          throw new Error("Tool call failed: Missing required parameters - draftId is required");
+        }
+
+        const gmail = new GmailService();
+        const draft = await gmail.getDraft(draftId);
+
+        const prompt = await handleGetPrompt({
+          method: "prompts/get",
+          params: {
+            name: "gmail_edit_draft",
+            arguments: { userInstructions, draftId, draft: JSON.stringify(draft) },
+          },
+        });
+
+        if (!prompt._meta?.responseSchema) {
+          throw new Error("Invalid prompt configuration: missing response schema");
+        }
+
+        await sendSamplingRequest({
+          method: "sampling/createMessage",
+          params: {
+            messages: prompt.messages.map((msg) =>
+              injectVariables(msg, {
+                userInstructions,
+                draftId,
+                draft: JSON.stringify(draft),
+              }),
+            ) as Array<{
+              role: "user" | "assistant";
+              content: { type: "text"; text: string };
+            }>,
+            maxTokens: 100000,
+            temperature: 0.7,
+            _meta: {
+              callback: "edit_draft",
+              responseSchema: prompt._meta.responseSchema,
+            },
+            arguments: { userInstructions, draftId, draft: JSON.stringify(draft) },
+          },
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Your draft edit request has been received and is being processed, we will notify you when it is complete.`,
             },
           ],
         };
@@ -175,7 +351,9 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
 
       case "gmail_list_drafts": {
         const gmail = new GmailService();
-        const drafts = await gmail.listDrafts();
+        const args = request.params.arguments as unknown as ListDraftsArgs;
+        const { maxResults } = args;
+        const drafts = await gmail.listDrafts(maxResults);
         return {
           content: [
             {
@@ -188,8 +366,9 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
 
       case "gmail_delete_draft": {
         const gmail = new GmailService();
-        const args = request.params.arguments as unknown as { draftId: string };
-        await gmail.deleteDraft(args.draftId);
+        const args = request.params.arguments as unknown as DeleteDraftArgs;
+        const { draftId } = args;
+        await gmail.deleteDraft(draftId);
         return {
           content: [
             {
@@ -202,10 +381,11 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         };
       }
 
-      case "gmail_trash_message": {
+      case "gmail_delete_email": {
         const gmail = new GmailService();
-        const args = request.params.arguments as unknown as { messageId: string };
-        await gmail.trashMessage(args.messageId);
+        const args = request.params.arguments as unknown as TrashMessageArgs;
+        const { messageId } = args;
+        await gmail.trashMessage(messageId);
         return {
           content: [
             {

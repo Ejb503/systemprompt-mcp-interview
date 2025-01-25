@@ -7,8 +7,7 @@ import {
 
 const AGENT_RESOURCE = {
   name: "Systemprompt default",
-  description:
-    "An expert agent for Gmail, Calendar management and task organization",
+  description: "An expert agent for Gmail, Calendar management and task organization",
   instruction: `You are a specialized agent with deep expertise in email management, calendar organization, and task coordination. Your capabilities include:
 
 1. Email Management (Gmail):
@@ -36,24 +35,10 @@ const AGENT_RESOURCE = {
 - Handle multi-participant coordination
 
 You have access to specialized tools and prompts for each of these areas. Always select the most appropriate tool for the task and execute operations efficiently while maintaining high quality and reliability.`,
-  voice: "Kore",
-  config: {
-    model: "models/gemini-2.0-flash-exp",
-    generationConfig: {
-      responseModalities: "audio",
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: "Kore",
-          },
-        },
-      },
-    },
-  },
 };
 
 export async function handleListResources(
-  request: ListResourcesRequest
+  request: ListResourcesRequest,
 ): Promise<ListResourcesResult> {
   return {
     resources: [
@@ -69,15 +54,13 @@ export async function handleListResources(
 }
 
 export async function handleResourceCall(
-  request: ReadResourceRequest
+  request: ReadResourceRequest,
 ): Promise<ReadResourceResult> {
   const { uri } = request.params;
   const match = uri.match(/^resource:\/\/\/block\/(.+)$/);
 
   if (!match) {
-    throw new Error(
-      "Invalid resource URI format - expected resource:///block/{id}"
-    );
+    throw new Error("Invalid resource URI format - expected resource:///block/{id}");
   }
 
   const blockId = match[1];
@@ -94,8 +77,6 @@ export async function handleResourceCall(
           name: AGENT_RESOURCE.name,
           description: AGENT_RESOURCE.description,
           instruction: AGENT_RESOURCE.instruction,
-          voice: AGENT_RESOURCE.voice,
-          config: AGENT_RESOURCE.config,
         }),
       },
     ],

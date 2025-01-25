@@ -6,10 +6,7 @@ import { XML_TAGS } from "../constants/message-handler.js";
  * @param messages Array of messages to update
  * @param blocks The page blocks to include
  */
-export function updateUserMessageWithContent(
-  messages: PromptMessage[],
-  blocks: unknown
-): void {
+export function updateUserMessageWithContent(messages: PromptMessage[], blocks: unknown): void {
   const userMessageIndex = messages.findIndex((msg) => msg.role === "user");
   if (userMessageIndex === -1) return;
 
@@ -22,7 +19,7 @@ export function updateUserMessageWithContent(
       type: "text",
       text: userMessage.content.text.replace(
         XML_TAGS.REQUEST_PARAMS_CLOSE,
-        XML_TAGS.EXISTING_CONTENT_TEMPLATE(JSON.stringify(blocks, null, 2))
+        XML_TAGS.EXISTING_CONTENT_TEMPLATE(JSON.stringify(blocks, null, 2)),
       ),
     },
   };
@@ -34,24 +31,25 @@ export function updateUserMessageWithContent(
  * @param variables The variables to inject
  * @returns The text with variables injected
  */
-export function injectVariablesIntoText(
-  text: string,
-  variables: Record<string, unknown>
-): string {
-  const matches = text.match(/{{([^}]+)}}/g);
-  if (!matches) return text;
+export function injectVariablesIntoText(text: string, variables: Record<string, unknown>): string {
+  // First handle conditional blocks
+  text = text.replace(/{{#([^}]+)}}(.*?){{\/\1}}/gs, (_, key, content) => {
+    return key in variables && variables[key] ? content : "";
+  });
 
-  const missingVariables = matches
+  // Then handle direct variable replacements
+  const directMatches = text.match(/{{([^#/][^}]*)}}/g);
+  if (!directMatches) return text;
+
+  const missingVariables = directMatches
     .map((match) => match.slice(2, -2))
     .filter((key) => !(key in variables));
 
   if (missingVariables.length > 0) {
-    throw new Error(
-      "Missing required variables: " + missingVariables.join(", ")
-    );
+    throw new Error("Missing required variables: " + missingVariables.join(", "));
   }
 
-  return text.replace(/{{([^}]+)}}/g, (_, key) => String(variables[key]));
+  return text.replace(/{{([^#/][^}]*)}}/g, (_, key) => String(variables[key] ?? ""));
 }
 
 /**
@@ -62,7 +60,7 @@ export function injectVariablesIntoText(
  */
 export function injectVariables(
   message: PromptMessage,
-  variables: Record<string, unknown>
+  variables: Record<string, unknown>,
 ): PromptMessage {
   if (message.content.type !== "text") return message;
 

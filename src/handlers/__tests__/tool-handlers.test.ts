@@ -1,54 +1,23 @@
-import { jest, describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import type { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
 import { handleToolCall } from "../tool-handlers.js";
 import type {
   SystempromptPromptResponse,
   SystempromptUserStatusResponse,
+  SystempromptBlockResponse,
+  SystempromptAgentResponse,
 } from "../../types/systemprompt.js";
 
-interface UserStatus {
-  user: {
-    name: string;
-    email: string;
-    roles: string[];
-  };
-  billing: {
-    customer: {
-      id: string;
-      email: string;
-      status: string;
-    };
-    subscription: Array<{
-      id: string;
-      status: string;
-      currency_code: string;
-      billing_cycle: {
-        frequency: number;
-        interval: string;
-      };
-      current_billing_period: {
-        starts_at: string;
-        ends_at: string;
-      };
-      items: Array<{
-        product: { name: string };
-        price: {
-          unit_price: { amount: string; currency_code: string };
-        };
-      }>;
-    }>;
-  };
-  api_key: string;
-}
-
-interface MockPrompt {
-  id: string;
-  metadata: {
-    title: string;
-    description: string;
-  };
-  content: string;
-}
+// Mock the server config
+jest.mock("../../config/server-config.js", () => ({
+  serverConfig: {
+    port: 3000,
+    host: "localhost",
+  },
+  serverCapabilities: {
+    tools: [],
+  },
+}));
 
 // Mock the main function
 jest.mock("../../index.ts", () => ({
@@ -143,55 +112,28 @@ const mockUserStatus: SystempromptUserStatusResponse = {
   api_key: "test-api-key",
 };
 
+interface MockSystemPromptService {
+  fetchUserStatus: () => Promise<SystempromptUserStatusResponse>;
+  getAllPrompts: () => Promise<SystempromptPromptResponse[]>;
+  listBlocks: () => Promise<SystempromptBlockResponse[]>;
+  listAgents: () => Promise<SystempromptAgentResponse[]>;
+  deletePrompt: (id: string) => Promise<void>;
+  deleteBlock: (id: string) => Promise<void>;
+}
+
 const mockSystemPromptService = {
-  fetchUserStatus: jest.fn().mockResolvedValue(mockUserStatus),
-  getAllPrompts: jest.fn().mockResolvedValue([]),
-  listBlocks: jest.fn().mockResolvedValue([]),
-  listAgents: jest.fn().mockResolvedValue([]),
-  deletePrompt: jest.fn().mockResolvedValue(undefined),
-  deleteBlock: jest.fn().mockResolvedValue(undefined),
+  fetchUserStatus: jest
+    .fn<() => Promise<SystempromptUserStatusResponse>>()
+    .mockResolvedValue(mockUserStatus),
+  getAllPrompts: jest.fn<() => Promise<SystempromptPromptResponse[]>>().mockResolvedValue([]),
+  listBlocks: jest.fn<() => Promise<SystempromptBlockResponse[]>>().mockResolvedValue([]),
+  listAgents: jest.fn<() => Promise<SystempromptAgentResponse[]>>().mockResolvedValue([]),
+  deletePrompt: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  deleteBlock: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
 };
 
 jest.mock("../../services/systemprompt-service.js", () => ({
   SystemPromptService: jest.fn(() => mockSystemPromptService),
-}));
-
-const mockPrompt: MockPrompt = {
-  id: "prompt123",
-  metadata: {
-    title: "Test Prompt",
-    description: "A test prompt",
-  },
-  content: "Test content",
-};
-
-const mockBlock: MockPrompt = {
-  id: "block123",
-  metadata: {
-    title: "Test Block",
-    description: "A test block",
-  },
-  content: "Test content",
-};
-
-const mockAgent: MockPrompt = {
-  id: "agent123",
-  metadata: {
-    title: "Test Agent",
-    description: "A test agent",
-  },
-  content: "Test content",
-};
-
-// Mock the server config
-jest.mock("../../config/server-config.js", () => ({
-  serverConfig: {
-    port: 3000,
-    host: "localhost",
-  },
-  serverCapabilities: {
-    tools: [],
-  },
 }));
 
 describe("Tool Handlers", () => {
@@ -293,302 +235,5 @@ describe("Tool Handlers", () => {
         ).rejects.toThrow("Service error");
       });
     });
-  });
-});
-
-afterEach(() => {
-  jest.resetModules();
-});
-
-describe("Heartbeat", () => {
-  const mockUserStatus: UserStatus = {
-    user: {
-      email: "test@example.com",
-      status: "active",
-    },
-    subscription: [
-      {
-        id: "sub123",
-        status: "active",
-        currency_code: "USD",
-        billing_cycle: {
-          frequency: 1,
-          interval: "month",
-        },
-        current_billing_period: {
-          starts_at: "2024-01-01T00:00:00Z",
-          ends_at: "2024-02-01T00:00:00Z",
-        },
-        items: [
-          {
-            product: { name: "Pro Plan" },
-            price: {
-              unit_price: { amount: "1000", currency_code: "USD" },
-            },
-          },
-        ],
-      },
-    ],
-  };
-
-  let mockSamplingModule: { sendSamplingRequest: jest.Mock };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockSamplingModule = require("../sampling.js");
-    mockSamplingModule.sendSamplingRequest.mockImplementation(async () => ({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            metadata: {
-              title: "Test Resource",
-              description: "A test resource",
-            },
-            content: "Test content",
-          }),
-        },
-      ],
-    }));
-  });
-
-  afterEach(() => {
-    jest.resetModules();
-  });
-
-  it("should handle systemprompt_heartbeat", async () => {
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_heartbeat",
-        params: {},
-      },
-    });
-    expect(result.content[0].text).toContain("User Information");
-    expect(result.content[0].text).toContain("Billing");
-  });
-
-  it("should handle empty subscription list in heartbeat", async () => {
-    mockSystemPromptService.fetchUserStatus.mockResolvedValueOnce({
-      user: {
-        name: "Test User",
-        email: "test@example.com",
-        roles: ["user"],
-      },
-      billing: {
-        customer: {
-          id: "cust123",
-          email: "test@example.com",
-          status: "active",
-        },
-        subscription: [],
-      },
-      api_key: "test-api-key",
-    });
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_heartbeat",
-        params: {},
-      },
-    });
-    expect(result.content[0].text).toContain("Billing");
-  });
-
-  it("should handle empty resource lists in fetch resources", async () => {
-    mockSystemPromptService.getAllPrompts.mockResolvedValueOnce([]);
-    mockSystemPromptService.listBlocks.mockResolvedValueOnce([]);
-    mockSystemPromptService.listAgents.mockResolvedValueOnce([]);
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_fetch_resources",
-        params: {},
-      },
-    });
-    expect(result.content[0].text).toContain("Prompts");
-    expect(result.content[0].text).toContain("Agents");
-    expect(result.content[0].text).toContain("Prompts");
-    expect(result.content[0].text).toContain("Resources");
-  });
-});
-
-describe("Resource Operations", () => {
-  it("should handle systemprompt_fetch_resources", async () => {
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_fetch_resources",
-        params: {},
-      },
-    });
-    expect(mockSystemPromptService.getAllPrompts).toHaveBeenCalled();
-    expect(mockSystemPromptService.listBlocks).toHaveBeenCalled();
-    expect(mockSystemPromptService.listAgents).toHaveBeenCalled();
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toContain("Agents");
-    expect(result.content[0].text).toContain("Prompts");
-    expect(result.content[0].text).toContain("Resources");
-  });
-
-  it("should handle create resource request", async () => {
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_create_resource",
-        arguments: {
-          type: "block",
-          userInstructions: "Create a test block",
-        },
-      },
-    });
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toBe(
-      "Your request has been recieved and is being processed, we will notify you when it is complete.",
-    );
-  });
-
-  it("should handle update resource request", async () => {
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_update_resource",
-        arguments: {
-          id: "test-id",
-          type: "block",
-          userInstructions: "Update test block",
-        },
-      },
-    });
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toBe(
-      "Your request has been recieved and is being processed, we will notify you when it is complete.",
-    );
-  });
-
-  it("should handle systemprompt_delete_resource", async () => {
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_delete_resource",
-        arguments: {
-          id: "test-id",
-        },
-      },
-    });
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toBe("Successfully deleted prompt test-id");
-  });
-
-  it("should handle invalid resource type for create", async () => {
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_create_resource",
-          arguments: {
-            type: "invalid",
-            userInstructions: "Create an invalid resource",
-          },
-        },
-      }),
-    ).rejects.toThrow("Invalid resource type: invalid");
-  });
-
-  it("should handle invalid resource type for update", async () => {
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_update_resource",
-          arguments: {
-            id: "test-id",
-            type: "invalid",
-            userInstructions: "Update an invalid resource",
-          },
-        },
-      }),
-    ).rejects.toThrow("Invalid resource type: invalid");
-  });
-
-  it("should handle missing id for delete resource", async () => {
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_delete_resource",
-          arguments: {},
-        },
-      }),
-    ).rejects.toThrow("ID is required for deleting a resource");
-  });
-
-  it("should handle invalid params for create resource", async () => {
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_create_resource",
-          arguments: {},
-        },
-      }),
-    ).rejects.toThrow(
-      "Tool call failed: Missing required parameters - type and userInstructions are required",
-    );
-  });
-
-  it("should handle invalid params for update resource", async () => {
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_update_resource",
-          arguments: {},
-        },
-      }),
-    ).rejects.toThrow(
-      "Tool call failed: Missing required parameters - id, type and userInstructions are required",
-    );
-  });
-
-  it("should handle successful block deletion", async () => {
-    const result = await handleToolCall({
-      method: "tools/call",
-      params: {
-        name: "systemprompt_delete_resource",
-        arguments: {
-          id: "test-block-id",
-        },
-      },
-    });
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toBe("Successfully deleted prompt test-block-id");
-  });
-});
-
-describe("Error Handling", () => {
-  it("should handle invalid tool name", async () => {
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "invalid_tool",
-          params: {},
-        },
-      }),
-    ).rejects.toThrow("Unknown tool: invalid_tool");
-  });
-
-  it("should handle service errors", async () => {
-    mockSystemPromptService.fetchUserStatus.mockRejectedValueOnce(new Error("Service error"));
-    await expect(
-      handleToolCall({
-        method: "tools/call",
-        params: {
-          name: "systemprompt_heartbeat",
-          params: {},
-        },
-      }),
-    ).rejects.toThrow("Service error");
   });
 });

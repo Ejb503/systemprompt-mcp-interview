@@ -371,6 +371,47 @@ export class GmailService extends GoogleBaseService {
     }
   }
 
+  async getDraft(draftId: string): Promise<EmailMetadata & { body: string }> {
+    await this.ensureInitialized();
+    try {
+      const response = await this.gmail.users.drafts.get({
+        userId: "me",
+        id: draftId,
+        format: "full",
+      });
+
+      if (!response.data.message) {
+        throw new Error("Draft message not found");
+      }
+
+      const metadata = await this.extractEmailMetadata(response.data.message);
+      let body = "";
+
+      // Extract message body
+      const message = response.data.message;
+      if (message.payload) {
+        if (message.payload.body?.data) {
+          body = Buffer.from(message.payload.body.data, "base64").toString("utf8");
+        } else if (message.payload.parts) {
+          const textPart = message.payload.parts.find(
+            (part) => part.mimeType === "text/plain" || part.mimeType === "text/html",
+          );
+          if (textPart?.body?.data) {
+            body = Buffer.from(textPart.body.data, "base64").toString("utf8");
+          }
+        }
+      }
+
+      return {
+        ...metadata,
+        body,
+      };
+    } catch (error) {
+      console.error("Failed to get draft:", error);
+      throw error;
+    }
+  }
+
   async modifyMessage(
     messageId: string,
     options: {
@@ -479,6 +520,70 @@ export class GmailService extends GoogleBaseService {
       this.labelCache.delete(labelId);
     } catch (error) {
       console.error("Failed to delete label:", error);
+      throw error;
+    }
+  }
+
+  async replyEmail(messageId: string, body: string, isHtml: boolean = false): Promise<string> {
+    await this.ensureInitialized();
+    try {
+      // Get the original message to extract threading information
+      const originalMessage: gmail_v1.Schema$Message = (
+        await this.gmail.users.messages.get({
+          userId: "me",
+          id: messageId,
+          format: "metadata",
+          metadataHeaders: ["Subject", "Message-ID", "References", "From", "To"],
+        })
+      ).data;
+
+      const headers = originalMessage.payload?.headers || [];
+      const subjectHeader = headers.find(
+        (h: gmail_v1.Schema$MessagePartHeader) => h.name === "Subject",
+      );
+      const messageIdHeader = headers.find(
+        (h: gmail_v1.Schema$MessagePartHeader) => h.name === "Message-ID",
+      );
+      const referencesHeader = headers.find(
+        (h: gmail_v1.Schema$MessagePartHeader) => h.name === "References",
+      );
+      const fromHeader = headers.find((h: gmail_v1.Schema$MessagePartHeader) => h.name === "From");
+      const toHeader = headers.find((h: gmail_v1.Schema$MessagePartHeader) => h.name === "To");
+
+      const subject = subjectHeader?.value || "";
+      const originalMessageId = messageIdHeader?.value || "";
+      const references = referencesHeader?.value || "";
+      const from = fromHeader?.value || "";
+      const to = toHeader?.value || "";
+
+      // Build References header for proper threading
+      const newReferences = references ? `${references} ${originalMessageId}` : originalMessageId;
+
+      // Create email with proper threading headers
+      const email = [
+        `Content-Type: ${isHtml ? "text/html" : "text/plain"}; charset="UTF-8"`,
+        "MIME-Version: 1.0",
+        `Subject: ${subject.startsWith("Re:") ? subject : `Re: ${subject}`}`,
+        `To: ${from}`,
+        `References: ${newReferences}`,
+        `In-Reply-To: ${originalMessageId}`,
+        "",
+        body,
+      ].join("\r\n");
+
+      const raw = Buffer.from(email).toString("base64url");
+
+      const response = await this.gmail.users.messages.send({
+        userId: "me",
+        requestBody: {
+          raw,
+          threadId: originalMessage.threadId,
+        },
+      });
+
+      return response.data.id!;
+    } catch (error) {
+      console.error("Failed to reply to email:", error);
       throw error;
     }
   }

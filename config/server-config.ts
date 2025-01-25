@@ -1,35 +1,32 @@
-import {
-  Implementation,
-  ServerCapabilities,
-} from "@modelcontextprotocol/sdk/types.js";
+import { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 
 export const serverConfig: Implementation = {
-  name: "systemprompt-mcp-google",
+  name: "systemprompt-mcp-gmail",
   version: "1.0.0",
   metadata: {
-    name: "System Prompt Google Integration Server",
+    name: "System Prompt Gmail Integration Server",
     description:
-      "MCP server providing seamless integration with Google services. Enables AI agents to interact with Gmail, Google Calendar, and other Google APIs through a secure, standardized interface.",
-    icon: "mdi:google",
-    color: "blue",
+      "A specialized Model Context Protocol (MCP) server that enables you to search, read, delete and send emails from your Gmail account, leveraging an AI Agent to help with each operation. The server is designed to work with the [multimodal-mcp-client](https://github.com/Ejb503/multimodal-mcp-client), a voice-powered MCP client that provides the frontend interface.",
+    icon: "solar:align-horizontal-center-line-duotone",
+    color: "primary",
     serverStartTime: Date.now(),
     environment: process.env.NODE_ENV,
     customData: {
-      serverFeatures: ["google-mail", "google-calendar", "oauth2"],
-      supportedAPIs: ["gmail", "calendar"],
-      authProvider: "google-oauth2",
-      requiredScopes: [
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/calendar",
-      ],
+      serverFeatures: ["gmail", "agent", "google", "systemprompt"],
     },
   },
 };
 
 export const serverCapabilities: { capabilities: ServerCapabilities } = {
   capabilities: {
-    resources: {},
+    resources: {
+      listChanged: true,
+    },
     tools: {},
-    prompts: {},
+    prompts: {
+      listChanged: true,
+    },
+    sampling: {},
+    logging: {},
   },
 };

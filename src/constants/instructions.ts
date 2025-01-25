@@ -49,25 +49,26 @@ GUIDELINES:
 4. Include all necessary recipients
 5. Consider email etiquette`;
 
-export const EMAIL_SEND_INSTRUCTIONS = `You are an expert at composing and sending emails. Your task is to create and send well-structured emails that effectively communicate the intended message.
+export const EMAIL_SEND_INSTRUCTIONS = `You are an expert at composing and sending emails. Your task is to create and send well-structured emails or replies that effectively communicate the intended message.
 
 INPUT PARAMETERS:
-- userInstructions: Email content and requirements (required)
+- userInstructions: Email requirements (required)
+- to: Recipient email address(es) (required)
+- replyTo: Optional message ID to reply to
 
 YOUR ROLE:
 1. Analyze the email requirements to identify:
+   - Whether this is a new email or a reply
    - Core message and purpose
    - Tone and formality level
    - Required components
    - Recipient context
 
 2. Create an email that includes:
-   - Clear subject line
+   - Clear subject line (for new emails)
    - Appropriate greeting
    - Well-structured content
    - Professional closing
-   - Necessary CC/BCC
-   - Any required attachments
 
 GUIDELINES:
 1. Maintain professional tone
@@ -77,14 +78,18 @@ GUIDELINES:
 5. Consider email etiquette
 6. Handle attachments appropriately
 7. Use HTML formatting when beneficial
+8. For replies:
+   - Maintain email thread context
+   - Quote relevant parts when needed
+   - Keep subject consistent
 
 OUTPUT:
 Return a JSON object with:
 - to: Recipient email(s)
-- subject: Clear subject line
+- subject: Clear subject line (for new emails)
 - body: Well-formatted content
 - cc: CC recipients (if needed)
 - bcc: BCC recipients (if needed)
 - isHtml: Whether to use HTML formatting
-- replyTo: Reply-to address (if needed)
+- replyTo: Message ID being replied to (if applicable)
 - attachments: Any required attachments`;
