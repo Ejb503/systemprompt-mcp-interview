@@ -1,15 +1,12 @@
-import {
-  Implementation,
-  ServerCapabilities,
-} from "@modelcontextprotocol/sdk/types.js";
+import { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 
 export const serverConfig: Implementation = {
-  name: "systemprompt-agent-server",
+  name: "systemprompt-mcp-gmail",
   version: "1.0.0",
   metadata: {
-    name: "System Prompt Agent Server",
+    name: "System Prompt MCP Gmail",
     description:
-      "A specialized MCP server for creating and managing systemprompt.io compatible prompts",
+      "A specialized Model Context Protocol (MCP) server that enables you to search, read, delete and send emails from your Gmail account, leveraging an AI Agent to help with each operation.",
     icon: "solar:align-horizontal-center-line-duotone",
     color: "primary",
     serverStartTime: Date.now(),
