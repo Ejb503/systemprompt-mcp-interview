@@ -4,82 +4,68 @@ import {
   ReadResourceResult,
   ListResourcesRequest,
 } from "@modelcontextprotocol/sdk/types.js";
-
-const AGENT_RESOURCE = {
-  name: "Systemprompt default",
-  description: "An expert agent for Gmail, Calendar management and task organization",
-  instruction: `You are a specialized agent with deep expertise in email management, calendar organization, and task coordination. Your capabilities include:
-
-1. Email Management (Gmail):
-- List, search, and analyze email messages
-- Send emails and manage drafts
-- Handle attachments and labels
-- Process email content intelligently
-
-2. Calendar Operations:
-- Schedule and manage meetings
-- Analyze calendar availability
-- Track events and deadlines
-- Identify scheduling conflicts
-
-3. Task Organization:
-- Create and manage todo lists
-- Prioritize tasks effectively
-- Track deadlines and progress
-- Optimize task workflows
-
-4. Smart Communication:
-- Compose well-structured emails
-- Analyze communication patterns
-- Maintain professional tone
-- Handle multi-participant coordination
-
-You have access to specialized tools and prompts for each of these areas. Always select the most appropriate tool for the task and execute operations efficiently while maintaining high quality and reliability.`,
-};
+import { SystemPromptService } from "../services/systemprompt-service.js";
+import {
+  mapBlockToReadResourceResult,
+  mapBlocksToListResourcesResult,
+  mapAgentsToListResourcesResult,
+  mapAgentToReadResourceResult,
+} from "../utils/mcp-mappers.js";
 
 export async function handleListResources(
   request: ListResourcesRequest,
 ): Promise<ListResourcesResult> {
-  return {
-    resources: [
-      {
-        uri: "resource:///block/default",
-        name: AGENT_RESOURCE.name,
-        description: AGENT_RESOURCE.description,
-        mimeType: "text/plain",
-      },
-    ],
-    _meta: {},
-  };
+  try {
+    const service = SystemPromptService.getInstance();
+    const blocks = await service.listBlocks();
+    const agents = await service.listAgents();
+
+    const blockResources = mapBlocksToListResourcesResult(blocks);
+    const agentResources = mapAgentsToListResourcesResult(agents);
+
+    return {
+      _meta: {},
+      resources: [...blockResources.resources, ...agentResources.resources],
+    };
+  } catch (error: any) {
+    console.error("Failed to fetch resources:", error);
+    throw new Error(
+      `Failed to fetch resources from systemprompt.io: ${error.message || "Unknown error"}`,
+    );
+  }
 }
 
 export async function handleResourceCall(
   request: ReadResourceRequest,
 ): Promise<ReadResourceResult> {
-  const { uri } = request.params;
-  const match = uri.match(/^resource:\/\/\/block\/(.+)$/);
+  try {
+    const service = SystemPromptService.getInstance();
+    const { uri } = request.params;
 
-  if (!match) {
-    throw new Error("Invalid resource URI format - expected resource:///block/{id}");
+    const blockMatch = uri.match(/^resource:\/\/\/block\/(.+)$/);
+    const agentMatch = uri.match(/^resource:\/\/\/agent\/(.+)$/);
+
+    if (!blockMatch && !agentMatch) {
+      throw new Error(
+        "Invalid resource URI format - expected resource:///block/{id} or resource:///agent/{id}",
+      );
+    }
+
+    if (blockMatch) {
+      const blockId = blockMatch[1];
+      const block = await service.getBlock(blockId);
+      return mapBlockToReadResourceResult(block);
+    } else if (agentMatch) {
+      const agentId = agentMatch[1];
+      const agent = await service.getAgent(agentId);
+      return mapAgentToReadResourceResult(agent);
+    }
+
+    throw new Error("Failed to process resource request");
+  } catch (error: any) {
+    console.error("Failed to fetch resource:", error);
+    throw new Error(
+      `Failed to fetch resource from systemprompt.io: ${error.message || "Unknown error"}`,
+    );
   }
-
-  const blockId = match[1];
-  if (blockId !== "default") {
-    throw new Error("Resource not found");
-  }
-
-  return {
-    contents: [
-      {
-        uri: uri,
-        mimeType: "text/plain",
-        text: JSON.stringify({
-          name: AGENT_RESOURCE.name,
-          description: AGENT_RESOURCE.description,
-          instruction: AGENT_RESOURCE.instruction,
-        }),
-      },
-    ],
-    _meta: { tag: ["agent"] },
-  };
 }

@@ -1,12 +1,7 @@
 import type { CreateMessageRequest, CreateMessageResult } from "@modelcontextprotocol/sdk/types.js";
 import { validateRequest } from "../utils/validation.js";
 import { server } from "../server.js";
-import {
-  handleSendEmailCallback,
-  handleReplyEmailCallback,
-  handleReplyDraftCallback,
-  handleEditDraftCallback,
-} from "./callbacks.js";
+import { handleConfigureInterviewCallback, handleSummarizeCVCallback } from "./callbacks.js";
 
 export async function sendSamplingRequest(
   request: CreateMessageRequest,
@@ -37,14 +32,10 @@ export async function sendSamplingRequest(
  */
 async function handleCallback(callback: string, result: CreateMessageResult): Promise<string> {
   switch (callback) {
-    case "send_email":
-      return handleSendEmailCallback(result);
-    case "reply_email":
-      return handleReplyEmailCallback(result);
-    case "reply_draft":
-      return handleReplyDraftCallback(result);
-    case "edit_draft":
-      return handleEditDraftCallback(result);
+    case "configure_interview":
+      return handleConfigureInterviewCallback(result);
+    case "summarize_cv":
+      return handleSummarizeCVCallback(result);
     default:
       throw new Error(`Unknown callback type: ${callback}`);
   }

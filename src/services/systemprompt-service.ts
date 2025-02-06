@@ -1,27 +1,30 @@
 import type {
-  SystempromptPromptResponse,
+  SystempromptBlockRequest,
+  SystempromptPromptRequest,
   SystempromptBlockResponse,
-  SystempromptAgentResponse,
+  SystempromptPromptResponse,
   SystempromptUserStatusResponse,
-} from "../types/systemprompt.js";
+  SystempromptAgentResponse,
+  SystempromptAgentRequest,
+} from "../types/index.js";
 
 export class SystemPromptService {
   private static instance: SystemPromptService | null = null;
+  private apiKey: string;
   private baseUrl: string;
 
   private constructor() {
-    this.baseUrl = "https://api.systemprompt.io/v1";
+    this.apiKey = process.env.SYSTEMPROMPT_API_KEY || "";
+    this.baseUrl = process.env.SYSTEMPROMPT_BASE_URL || "https://api.systemprompt.io/v1";
   }
 
   public static initialize(): void {
-    if (!SystemPromptService.instance) {
-      SystemPromptService.instance = new SystemPromptService();
-    }
+    SystemPromptService.instance = new SystemPromptService();
   }
 
   public static getInstance(): SystemPromptService {
     if (!SystemPromptService.instance) {
-      throw new Error("SystemPromptService must be initialized first");
+      throw new Error("SystemPromptService must be initialized with an API key first");
     }
     return SystemPromptService.instance;
   }
@@ -30,14 +33,32 @@ export class SystemPromptService {
     SystemPromptService.instance = null;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async fetch(method: string, path: string, body?: unknown): Promise<Response> {
+    const url = new URL(path, this.baseUrl).toString();
+    return fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": this.apiKey,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<T> {
     try {
       const url = `${this.baseUrl}${path}`;
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
-          "api-key": process.env.SYSTEMPROMPT_API_KEY as string,
+          "api-key": this.apiKey,
+          ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
       });
@@ -56,41 +77,123 @@ export class SystemPromptService {
             throw new Error("Invalid API key");
           case 404:
             throw new Error("Resource not found - it may have been deleted");
+          case 409:
+            throw new Error("Resource conflict - it may have been edited");
+          case 400:
+            throw new Error("Invalid data");
           default:
             throw new Error(data?.message || "API request failed");
         }
       }
 
-      return data;
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return data as T;
     } catch (error) {
       if (error instanceof Error) {
+        if (error.message === "Failed to fetch") {
+          throw new Error("API request failed");
+        }
         throw error;
       }
-      throw new Error("Failed to make API request");
+      throw new Error("API request failed");
     }
   }
 
-  public async getAllPrompts(): Promise<SystempromptPromptResponse[]> {
-    return this.request<SystempromptPromptResponse[]>("GET", "/prompts");
+  async getAllPrompts(): Promise<SystempromptPromptResponse[]> {
+    return this.request<SystempromptPromptResponse[]>("GET", "/prompt");
   }
 
-  public async listBlocks(): Promise<SystempromptBlockResponse[]> {
-    return this.request<SystempromptBlockResponse[]>("GET", "/blocks");
+  async createPrompt(data: SystempromptPromptRequest): Promise<SystempromptPromptResponse> {
+    return this.request<SystempromptPromptResponse>("POST", "/prompt", data);
   }
 
-  public async listAgents(): Promise<SystempromptAgentResponse[]> {
-    return this.request<SystempromptAgentResponse[]>("GET", "/agents");
+  async editPrompt(
+    uuid: string,
+    data: Partial<SystempromptPromptRequest>,
+  ): Promise<SystempromptPromptResponse> {
+    return this.request<SystempromptPromptResponse>("PUT", `/prompt/${uuid}`, data);
   }
 
-  public async fetchUserStatus(): Promise<SystempromptUserStatusResponse> {
-    return this.request<SystempromptUserStatusResponse>("GET", "/user/status");
+  async deletePrompt(uuid: string): Promise<void> {
+    return this.request<void>("DELETE", `/prompt/${uuid}`);
   }
 
-  public async deletePrompt(id: string): Promise<void> {
-    await this.request<void>("DELETE", `/prompts/${id}`);
+  async createBlock(data: SystempromptBlockRequest): Promise<SystempromptBlockResponse> {
+    return this.request<SystempromptBlockResponse>("POST", "/block", data);
   }
 
-  public async deleteBlock(id: string): Promise<void> {
-    await this.request<void>("DELETE", `/blocks/${id}`);
+  async editBlock(
+    uuid: string,
+    data: Partial<SystempromptBlockRequest>,
+  ): Promise<SystempromptBlockResponse> {
+    return this.request<SystempromptBlockResponse>("PUT", `/block/${uuid}`, data);
+  }
+
+  async listBlocks(
+    options: {
+      tags?: string[];
+      status?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+      sortBy?: string;
+      sortDirection?: "ASC" | "DESC";
+    } = {},
+  ): Promise<SystempromptBlockResponse[]> {
+    const params = new URLSearchParams();
+
+    if (options.tags?.length) {
+      params.set("tag", options.tags.join(","));
+    } else {
+      // Default to 'mcp-systemprompt-interview' tag if no tags specified
+      params.set("tag", "mcp-systemprompt-interview");
+    }
+
+    if (options.status) params.set("status", options.status);
+    if (options.search) params.set("search", options.search);
+    if (options.page) params.set("page", options.page.toString());
+    if (options.limit) params.set("limit", options.limit.toString());
+    if (options.sortBy) params.set("sort_by", options.sortBy);
+    if (options.sortDirection) params.set("sort_direction", options.sortDirection);
+
+    const queryString = params.toString();
+    return this.request<SystempromptBlockResponse[]>(
+      "GET",
+      `/block${queryString ? `?${queryString}` : ""}`,
+    );
+  }
+
+  async getBlock(blockId: string): Promise<SystempromptBlockResponse> {
+    return this.request<SystempromptBlockResponse>("GET", `/block/${blockId}`);
+  }
+
+  async getAgent(agentId: string): Promise<SystempromptAgentResponse> {
+    return this.request<SystempromptAgentResponse>("GET", `/agent/${agentId}`);
+  }
+
+  async listAgents(): Promise<SystempromptAgentResponse[]> {
+    return this.request<SystempromptAgentResponse[]>("GET", "/agent");
+  }
+
+  async createAgent(data: SystempromptAgentRequest): Promise<SystempromptAgentResponse> {
+    return this.request<SystempromptAgentResponse>("POST", "/agent", data);
+  }
+
+  async editAgent(
+    uuid: string,
+    data: Partial<SystempromptAgentRequest>,
+  ): Promise<SystempromptAgentResponse> {
+    return this.request<SystempromptAgentResponse>("PUT", `/agent/${uuid}`, data);
+  }
+
+  async deleteBlock(uuid: string): Promise<void> {
+    return this.request<void>("DELETE", `/block/${uuid}`);
+  }
+
+  async fetchUserStatus(): Promise<SystempromptUserStatusResponse> {
+    return this.request<SystempromptUserStatusResponse>("GET", "/user/mcp");
   }
 }

@@ -1,10 +1,10 @@
 {
-  "name": "systemprompt-mcp-gmail",
-  "version": "1.0.4",
-  "description": "A specialized Model Context Protocol (MCP) server that enables you to search, read, delete and send emails from your Gmail account, leveraging an AI Agent to help with each operation.",
+  "name": "systemprompt-mcp-interview",
+  "version": "1.0.0",
+  "description": "A specialized Model Context Protocol (MCP) server that enables AI-powered interview roleplay scenarios",
   "type": "module",
   "bin": {
-    "systemprompt-mcp-gmail": "./build/index.js"
+    "systemprompt-mcp-interview": "./build/index.js"
   },
   "files": [
     "build"
@@ -16,19 +16,16 @@
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "auth-google": "node --loader ts-node/esm scripts/auth-google.ts"
+    "test:coverage": "jest --coverage"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Ejb503/systemprompt-mcp-gmail"
+    "url": "https://github.com/Ejb503/systemprompt-mcp-interview"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
     "ajv": "^8.17.1",
-    "dotenv": "^16.4.7",
-    "google-auth-library": "^9.15.0",
-    "googleapis": "^144.0.0"
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
@@ -57,14 +54,14 @@
     "systemprompt",
     "mcp",
     "model-context-protocol",
-    "google",
-    "gmail",
-    "oauth"
+    "interview",
+    "roleplay",
+    "ai"
   ],
   "author": "Ejb503",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/Ejb503/systemprompt-mcp-gmail/issues"
+    "url": "https://github.com/Ejb503/systemprompt-mcp-interview/issues"
   },
   "homepage": "https://systemprompt.io",
   "engines": {

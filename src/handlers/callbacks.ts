@@ -1,89 +1,94 @@
 import { CreateMessageResult } from "@modelcontextprotocol/sdk/types.js";
-import { sendOperationNotification } from "./notifications.js";
-import { GmailService } from "../services/gmail-service.js";
+import { sendJsonResultNotification, sendOperationNotification } from "./notifications.js";
+import { SystemPromptService } from "../services/systemprompt-service.js";
+import { server } from "../server.js";
+import { InterviewPlanResponse, CVSummaryResponse } from "../types/sampling-schemas.js";
 
 /**
- * Handles sending an email via Gmail API
+ * Handles sending an email via SystemPrompt API
  * @param result The LLM result
  * @returns The tool response
  */
-export async function handleSendEmailCallback(result: CreateMessageResult): Promise<string> {
+export async function handleConfigureInterviewCallback(
+  result: CreateMessageResult,
+): Promise<string> {
   if (result.content.type !== "text") {
     throw new Error("Expected text content");
   }
 
-  const emailRequest = JSON.parse(result.content.text);
-  const gmail = new GmailService();
-  const messageId = await gmail.sendEmail(emailRequest);
+  const interviewPlan = JSON.parse(result.content.text) as InterviewPlanResponse;
 
-  const message = `Successfully sent email with id: ${messageId}`;
-  await sendOperationNotification("send_email", message);
+  if (
+    !interviewPlan.interviewId ||
+    !interviewPlan.interviewPlan ||
+    !interviewPlan.metadata ||
+    !interviewPlan.systemPromptMetadata
+  ) {
+    throw new Error("Invalid interview plan format");
+  }
+
+  const blockData = {
+    content: result.content.text,
+    prefix: interviewPlan.systemPromptMetadata.prefix,
+    metadata: {
+      title: interviewPlan.systemPromptMetadata.title,
+      description: interviewPlan.systemPromptMetadata.description,
+      tag: interviewPlan.systemPromptMetadata.tag,
+    },
+  };
+  await sendJsonResultNotification(JSON.stringify(blockData));
+
+  // Save to SystemPrompt as a block with correct types
+  const systemprompt = SystemPromptService.getInstance();
+  await systemprompt.createBlock(blockData);
+
+  const message = `Successfully created interview plan ${interviewPlan.interviewId} with ${interviewPlan.metadata.totalQuestions} questions`;
+  await sendOperationNotification("configure_interview", message);
   return message;
 }
 
 /**
- * Handles replying to an email via Gmail API
+ * Handles saving the CV summary to SystemPrompt
  * @param result The LLM result
  * @returns The tool response
  */
-export async function handleReplyEmailCallback(result: CreateMessageResult): Promise<string> {
+export async function handleSummarizeCVCallback(result: CreateMessageResult): Promise<string> {
   if (result.content.type !== "text") {
     throw new Error("Expected text content");
   }
 
-  const emailRequest = JSON.parse(result.content.text);
-  const gmail = new GmailService();
-  const messageId = await gmail.replyEmail(
-    emailRequest.replyTo,
-    emailRequest.body,
-    emailRequest.isHtml,
-  );
-
-  const message = `Successfully sent reply with id: ${messageId}`;
-  await sendOperationNotification("reply_email", message);
-  return message;
-}
-
-/**
- * Handles creating a draft reply via Gmail API
- * @param result The LLM result
- * @returns The tool response
- */
-export async function handleReplyDraftCallback(result: CreateMessageResult): Promise<string> {
-  if (result.content.type !== "text") {
-    throw new Error("Expected text content");
+  let cvSummary;
+  try {
+    cvSummary = JSON.parse(result.content.text) as CVSummaryResponse;
+    if (
+      !cvSummary.personalInfo ||
+      !cvSummary.skills ||
+      !cvSummary.metadata ||
+      !cvSummary.systemPromptMetadata
+    ) {
+      throw new Error("Invalid CV summary format");
+    }
+  } catch (error) {
+    throw new Error("Invalid CV summary format");
   }
 
-  const emailRequest = JSON.parse(result.content.text);
-  const gmail = new GmailService();
-  const draftId = await gmail.createDraft({
-    ...emailRequest,
-    replyTo: emailRequest.replyTo,
-  });
+  const blockData = {
+    content: result.content.text,
+    prefix: cvSummary.systemPromptMetadata.prefix,
+    metadata: {
+      title: cvSummary.systemPromptMetadata.title,
+      description: cvSummary.systemPromptMetadata.description,
+      tag: cvSummary.systemPromptMetadata.tag,
+    },
+  };
 
-  const message = `Successfully created draft reply with id: ${draftId}`;
-  await sendOperationNotification("reply_draft", message);
-  return message;
-}
+  await sendJsonResultNotification(JSON.stringify(blockData));
 
-/**
- * Handles editing a draft via Gmail API
- * @param result The LLM result
- * @returns The tool response
- */
-export async function handleEditDraftCallback(result: CreateMessageResult): Promise<string> {
-  if (result.content.type !== "text") {
-    throw new Error("Expected text content");
-  }
-
-  const emailRequest = JSON.parse(result.content.text);
-  const gmail = new GmailService();
-  const draftId = await gmail.updateDraft({
-    ...emailRequest,
-    id: emailRequest.draftId,
-  });
-
-  const message = `Successfully updated draft with id: ${draftId}`;
-  await sendOperationNotification("edit_draft", message);
+  // Save to SystemPrompt as a block
+  const systemprompt = SystemPromptService.getInstance();
+  await systemprompt.createBlock(blockData);
+  server.sendResourceListChanged();
+  const message = `Successfully processed CV summary for ${cvSummary.metadata.primaryDomain} role`;
+  await sendOperationNotification("summarize_cv", message);
   return message;
 }

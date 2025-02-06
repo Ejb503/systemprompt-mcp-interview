@@ -1,18 +1,18 @@
 import { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/types.js";
 
 export const serverConfig: Implementation = {
-  name: "systemprompt-mcp-gmail",
+  name: "systemprompt-mcp-interview",
   version: "1.0.0",
   metadata: {
-    name: "System Prompt MCP Gmail",
+    name: "System Prompt MCP Interview",
     description:
-      "A specialized Model Context Protocol (MCP) server that enables you to search, read, delete and send emails from your Gmail account, leveraging an AI Agent to help with each operation.",
-    icon: "solar:align-horizontal-center-line-duotone",
+      "A specialized Model Context Protocol (MCP) server that conducts mock interviews, provides feedback, and helps users practice their interview skills with AI-powered interview scenarios.",
+    icon: "solar:users-group-rounded-line-duotone",
     color: "primary",
     serverStartTime: Date.now(),
     environment: process.env.NODE_ENV,
     customData: {
-      serverFeatures: ["agent", "prompts", "systemprompt"],
+      serverFeatures: ["agent", "prompts", "systemprompt", "interviews"],
     },
   },
 };

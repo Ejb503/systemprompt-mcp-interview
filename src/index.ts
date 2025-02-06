@@ -16,7 +16,6 @@ import { config } from "dotenv";
 import { SystemPromptService } from "./services/systemprompt-service.js";
 import { sendSamplingRequest } from "./handlers/sampling.js";
 import { server } from "./server.js";
-import { GoogleAuthService } from "./services/google-auth-service.js";
 
 export async function main() {
   config();
@@ -25,16 +24,7 @@ export async function main() {
   if (!apiKey) {
     throw new Error("SYSTEMPROMPT_API_KEY environment variable is required");
   }
-  const token = process.env.GOOGLE_TOKEN;
-  const credentials = process.env.GOOGLE_CREDENTIALS;
-  if (!token || !credentials) {
-    throw new Error("GOOGLE_TOKEN and GOOGLE_CREDENTIALS environment variables are required");
-  }
   SystemPromptService.initialize();
-
-  // Initialize Google Auth
-  const googleAuth = GoogleAuthService.getInstance();
-  await googleAuth.initialize();
 
   server.setRequestHandler(ListResourcesRequestSchema, handleListResources);
   server.setRequestHandler(ReadResourceRequestSchema, handleResourceCall);

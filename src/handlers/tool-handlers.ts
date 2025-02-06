@@ -1,4 +1,3 @@
-import { GmailService } from "../services/gmail-service.js";
 import {
   CallToolRequest,
   CallToolResult,
@@ -6,41 +5,13 @@ import {
   ListToolsResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { TOOLS } from "../constants/tools.js";
-import {
-  ListEmailsArgs,
-  GetEmailArgs,
-  GetDraftArgs,
-  SearchEmailsArgs,
-  SendEmailAIArgs,
-  SendEmailManualArgs,
-  CreateDraftAIArgs,
-  EditDraftAIArgs,
-  ListDraftsArgs,
-  DeleteDraftArgs,
-  TrashMessageArgs,
-} from "../types/tool-schemas.js";
+import { ConfigureInterviewArgs, SummarizeCVArgs } from "../types/tool-schemas.js";
 import { TOOL_ERROR_MESSAGES } from "../constants/tools.js";
 import { sendSamplingRequest } from "./sampling.js";
-import { handleGetPrompt } from "./prompt-handlers.js";
 import { injectVariables } from "../utils/message-handlers.js";
-
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-
-function validateEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email.trim());
-}
-
-function validateEmailList(emails: string | string[] | undefined): void {
-  if (!emails) return;
-
-  const emailList = Array.isArray(emails) ? emails : emails.split(",").map((e) => e.trim());
-
-  for (const email of emailList) {
-    if (!validateEmail(email)) {
-      throw new Error(`Invalid email address: ${email}`);
-    }
-  }
-}
+import { CONFIGURE_INTERVIEW_PROMPT, SUMMARIZE_CV_PROMPT } from "../constants/sampling-prompts.js";
+import { handleGetPrompt } from "./prompt-handlers.js";
+import { handleResourceCall } from "./resource-handlers.js";
 
 export async function handleListTools(request: ListToolsRequest): Promise<ListToolsResult> {
   return { tools: TOOLS };
@@ -49,350 +20,114 @@ export async function handleListTools(request: ListToolsRequest): Promise<ListTo
 export async function handleToolCall(request: CallToolRequest): Promise<CallToolResult> {
   try {
     switch (request.params.name) {
-      case "gmail_list_emails": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as ListEmailsArgs;
-        const messages = await gmail.listMessages(args.maxResults);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(messages, null, 2),
+      case "configure_interview": {
+        const { title, description, notes, cv } = request.params
+          .arguments as unknown as ConfigureInterviewArgs;
+
+        try {
+          const resource = await handleResourceCall({
+            method: "resources/read",
+            params: {
+              uri: cv,
             },
-          ],
-        };
-      }
-
-      case "gmail_get_email": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as GetEmailArgs;
-        const message = await gmail.getMessage(args.messageId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(message, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "gmail_get_draft": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as GetDraftArgs;
-        const draft = await gmail.getDraft(args.draftId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(draft, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "gmail_search_emails": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as SearchEmailsArgs;
-        const messages = await gmail.searchMessages(args.query, args.maxResults);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(messages, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "gmail_send_email_ai": {
-        const args = request.params.arguments as unknown as SendEmailAIArgs;
-        const { userInstructions, to, replyTo } = args;
-        if (!userInstructions) {
-          throw new Error(
-            "Tool call failed: Missing required parameters - userInstructions is required",
-          );
-        }
-
-        if (!to) {
-          throw new Error("Tool call failed: Missing required parameters - to is required");
-        }
-
-        validateEmailList(to);
-
-        let threadContent: string | undefined;
-        if (replyTo) {
-          const gmail = new GmailService();
-          const message = await gmail.getMessage(replyTo);
-          threadContent = JSON.stringify(message);
-        }
-
-        const prompt = await handleGetPrompt({
-          method: "prompts/get",
-          params: {
-            name: replyTo ? "gmail_reply_email" : "gmail_send_email",
-            arguments: {
-              userInstructions,
-              to,
-              ...(replyTo && threadContent
-                ? {
-                    messageId: replyTo,
-                    threadContent,
-                  }
-                : {}),
-            },
-          },
-        });
-
-        if (!prompt._meta?.responseSchema) {
-          throw new Error("Invalid prompt configuration: missing response schema");
-        }
-
-        await sendSamplingRequest({
-          method: "sampling/createMessage",
-          params: {
-            messages: prompt.messages.map((msg) =>
-              injectVariables(msg, {
-                userInstructions,
-                to,
-                ...(replyTo && threadContent
-                  ? {
-                      messageId: replyTo,
-                      threadContent,
-                    }
-                  : {}),
-              }),
-            ) as Array<{
-              role: "user" | "assistant";
-              content: { type: "text"; text: string };
-            }>,
-            maxTokens: 100000,
-            temperature: 0.7,
-            _meta: {
-              callback: replyTo ? "reply_email" : "send_email",
-              responseSchema: prompt._meta.responseSchema,
-            },
-            arguments: { userInstructions, to, ...(replyTo ? { messageId: replyTo } : {}) },
-          },
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Your ${replyTo ? "reply" : "email"} request has been received and is being processed, we will notify you when it is complete.`,
-            },
-          ],
-        };
-      }
-
-      case "gmail_send_email_manual": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as SendEmailManualArgs;
-        const { to, subject, body, cc, bcc, isHtml, replyTo } = args;
-
-        validateEmailList(to);
-        if (cc) validateEmailList(cc);
-        if (bcc) validateEmailList(bcc);
-
-        if (replyTo) {
-          await gmail.replyEmail(replyTo, body, isHtml);
-        } else {
-          if (!subject) {
-            throw new Error(
-              "Tool call failed: Missing required parameters - subject is required for new emails",
-            );
-          }
-          await gmail.sendEmail({
-            to,
-            subject,
-            body,
-            cc,
-            bcc,
-            isHtml,
           });
-        }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                status: `${replyTo ? "Reply" : "Email"} sent successfully`,
-                to,
-              }),
+          if (!resource?.contents?.[0]?.text) {
+            throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} Invalid CV resource format`);
+          }
+
+          const cvSummary = resource.contents[0].text as string;
+          const prompt = await handleGetPrompt({
+            method: "prompts/get",
+            params: {
+              name: CONFIGURE_INTERVIEW_PROMPT.name,
+              arguments: { title, description, notes: notes ?? "", cv: cvSummary },
             },
-          ],
-        };
+          });
+
+          const responseSchema = prompt._meta?.responseSchema;
+          if (!responseSchema) {
+            throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} No response schema found`);
+          }
+
+          await sendSamplingRequest({
+            method: "sampling/createMessage",
+            params: {
+              messages: CONFIGURE_INTERVIEW_PROMPT.messages.map((msg) =>
+                injectVariables(msg, {
+                  title,
+                  description,
+                  notes: notes ?? "",
+                  cv: cvSummary,
+                }),
+              ) as Array<{
+                role: "user" | "assistant";
+                content: { type: "text"; text: string };
+              }>,
+              maxTokens: 100000,
+              temperature: 0.7,
+              _meta: {
+                callback: "configure_interview",
+                responseSchema: responseSchema,
+              },
+              arguments: { title, description, notes: notes ?? "", cv: cvSummary },
+            },
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Interview configuration started, please wait...",
+              },
+            ],
+          };
+        } catch (error) {
+          console.error(`Error configuring interview: ${error}`);
+          throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} ${error}`);
+        }
       }
 
-      case "gmail_create_draft_ai": {
-        const args = request.params.arguments as unknown as CreateDraftAIArgs;
-        const { userInstructions, to, replyTo } = args;
-        if (!userInstructions) {
-          throw new Error(
-            "Tool call failed: Missing required parameters - userInstructions is required",
-          );
-        }
-
-        if (!to) {
-          throw new Error("Tool call failed: Missing required parameters - to is required");
-        }
-
-        validateEmailList(to);
-
-        if (replyTo) {
-          const gmail = new GmailService();
-          await gmail.getMessage(replyTo);
-        }
+      case "summarize_cv": {
+        const { cv } = request.params.arguments as unknown as SummarizeCVArgs;
 
         const prompt = await handleGetPrompt({
           method: "prompts/get",
           params: {
-            name: replyTo ? "gmail_reply_draft" : "gmail_create_draft",
-            arguments: { userInstructions, to, ...(replyTo ? { messageId: replyTo } : {}) },
+            name: SUMMARIZE_CV_PROMPT.name,
+            arguments: { cv },
           },
         });
 
-        if (!prompt._meta?.responseSchema) {
-          throw new Error("Invalid prompt configuration: missing response schema");
+        const responseSchema = prompt._meta?.responseSchema;
+        if (!responseSchema) {
+          throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} No response schema found`);
         }
 
         await sendSamplingRequest({
           method: "sampling/createMessage",
           params: {
-            messages: prompt.messages.map((msg) =>
-              injectVariables(msg, {
-                userInstructions,
-                to,
-                ...(replyTo ? { messageId: replyTo } : {}),
-              }),
+            messages: SUMMARIZE_CV_PROMPT.messages.map((msg) =>
+              injectVariables(msg, { cv }),
             ) as Array<{
               role: "user" | "assistant";
               content: { type: "text"; text: string };
             }>,
             maxTokens: 100000,
-            temperature: 0.7,
+            temperature: 0.5,
             _meta: {
-              callback: replyTo ? "reply_draft" : "create_draft",
-              responseSchema: prompt._meta.responseSchema,
+              callback: "summarize_cv",
+              responseSchema: responseSchema,
             },
-            arguments: { userInstructions, to, ...(replyTo ? { messageId: replyTo } : {}) },
-          },
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Your draft ${replyTo ? "reply" : "email"} request has been received and is being processed, we will notify you when it is complete.`,
-            },
-          ],
-        };
-      }
-
-      case "gmail_edit_draft_ai": {
-        const args = request.params.arguments as unknown as EditDraftAIArgs;
-        const { draftId, userInstructions } = args;
-        if (!userInstructions) {
-          throw new Error(
-            "Tool call failed: Missing required parameters - userInstructions is required",
-          );
-        }
-
-        if (!draftId) {
-          throw new Error("Tool call failed: Missing required parameters - draftId is required");
-        }
-
-        const gmail = new GmailService();
-        const draft = await gmail.getDraft(draftId);
-
-        const prompt = await handleGetPrompt({
-          method: "prompts/get",
-          params: {
-            name: "gmail_edit_draft",
-            arguments: { userInstructions, draftId, draft: JSON.stringify(draft) },
+            arguments: { cv },
           },
         });
 
-        if (!prompt._meta?.responseSchema) {
-          throw new Error("Invalid prompt configuration: missing response schema");
-        }
-
-        await sendSamplingRequest({
-          method: "sampling/createMessage",
-          params: {
-            messages: prompt.messages.map((msg) =>
-              injectVariables(msg, {
-                userInstructions,
-                draftId,
-                draft: JSON.stringify(draft),
-              }),
-            ) as Array<{
-              role: "user" | "assistant";
-              content: { type: "text"; text: string };
-            }>,
-            maxTokens: 100000,
-            temperature: 0.7,
-            _meta: {
-              callback: "edit_draft",
-              responseSchema: prompt._meta.responseSchema,
-            },
-            arguments: { userInstructions, draftId, draft: JSON.stringify(draft) },
-          },
-        });
         return {
           content: [
             {
               type: "text",
-              text: `Your draft edit request has been received and is being processed, we will notify you when it is complete.`,
-            },
-          ],
-        };
-      }
-
-      case "gmail_list_drafts": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as ListDraftsArgs;
-        const { maxResults } = args;
-        const drafts = await gmail.listDrafts(maxResults);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(drafts, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "gmail_delete_draft": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as DeleteDraftArgs;
-        const { draftId } = args;
-        await gmail.deleteDraft(draftId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                status: "Draft deleted successfully",
-              }),
-            },
-          ],
-        };
-      }
-
-      case "gmail_delete_email": {
-        const gmail = new GmailService();
-        const args = request.params.arguments as unknown as TrashMessageArgs;
-        const { messageId } = args;
-        await gmail.trashMessage(messageId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                status: "Message moved to trash successfully",
-              }),
+              text: "CV analysis started, please wait...",
             },
           ],
         };

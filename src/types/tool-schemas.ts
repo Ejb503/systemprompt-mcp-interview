@@ -1,67 +1,112 @@
-// Tool argument schemas
-export interface ListEmailsArgs {
-  maxResults?: number;
-  after?: string; // Date in YYYY/MM/DD format
-  before?: string; // Date in YYYY/MM/DD format
-  sender?: string; // Sender email address
-  to?: string; // Recipient email address
-  subject?: string; // Subject line text
-  hasAttachment?: boolean; // Whether the email has attachments
-  label?: string; // Gmail label name
+export interface SetupInterviewArgs {
+  userProfile: {
+    experience: string;
+    skills: string[];
+    education: string;
+    targetRole: string;
+    preferredCompany?: string;
+  };
+  interviewType: "technical" | "behavioral" | "system_design";
+  duration?: number; // Interview duration in minutes
+  difficultyLevel?: "entry" | "intermediate" | "senior" | "principal";
 }
 
-export interface GetEmailArgs {
-  messageId: string;
+export interface ConductInterviewArgs {
+  interviewId: string;
+  candidateResponse?: string;
+  currentQuestion?: number;
 }
 
-export interface GetDraftArgs {
-  draftId: string;
+export interface ProvideFeedbackArgs {
+  interviewId: string;
+  interviewTranscript: string;
+  evaluationCriteria: {
+    technicalSkills?: boolean;
+    problemSolving?: boolean;
+    communication?: boolean;
+    systemDesign?: boolean;
+    behavioral?: boolean;
+  };
 }
 
-export interface SearchEmailsArgs {
-  query: string;
-  maxResults?: number;
-  after?: string; // Date in YYYY/MM/DD format
-  before?: string; // Date in YYYY/MM/DD format
+export interface GetInterviewArgs {
+  interviewId: string;
 }
 
-export interface SendEmailAIArgs {
-  to: string; // Recipient email address(es). Multiple addresses can be comma-separated.
-  userInstructions: string; // Instructions for AI to generate the email
-  replyTo?: string; // Optional message ID to reply to
-}
-
-export interface SendEmailManualArgs {
-  to: string; // Recipient email address(es). Multiple addresses can be comma-separated.
-  subject?: string; // Email subject line, optional if replyTo is provided
-  body: string; // Email body content
-  cc?: string; // CC recipient email address(es)
-  bcc?: string; // BCC recipient email address(es)
-  isHtml?: boolean; // Whether the body content is HTML
-  replyTo?: string; // Optional message ID to reply to
-}
-
-export interface CreateDraftAIArgs {
-  to: string; // Recipient email address(es). Multiple addresses can be comma-separated.
-  userInstructions: string; // Instructions for AI to generate the draft
-  replyTo?: string; // Optional message ID to reply to
-}
-
-export interface EditDraftAIArgs {
-  draftId: string; // The ID of the draft to edit
-  userInstructions: string; // Instructions for AI to edit the draft
-}
-
-export interface ListDraftsArgs {
+export interface ListInterviewsArgs {
+  candidateId: string;
+  status?: "scheduled" | "completed" | "in_progress";
   maxResults?: number;
 }
 
-export interface DeleteDraftArgs {
-  draftId: string;
+export interface SaveInterviewArgs {
+  interviewId: string;
+  transcript: string;
+  feedback?: string;
 }
 
-export interface TrashMessageArgs {
-  messageId: string;
+export interface ConfigureInterviewArgs {
+  title: string; // Job title
+  description: string; // Job description
+  cv: string; // CV resource URI
+  notes?: string; // Additional context/notes
 }
 
-export interface ListLabelsArgs {}
+export interface SummarizeCVArgs {
+  cv: string;
+}
+
+export interface CVSummary {
+  personalInfo: {
+    name?: string;
+    email?: string;
+    location?: string;
+    phoneNumber?: string;
+    linkedIn?: string;
+    portfolio?: string;
+  };
+  professionalSummary: string;
+  skills: {
+    technical: string[];
+    soft: string[];
+    tools: string[];
+    languages?: string[];
+  };
+  workExperience: Array<{
+    company: string;
+    position: string;
+    duration: {
+      start: string;
+      end: string;
+    };
+    highlights: string[];
+    technologies: string[];
+  }>;
+  education: Array<{
+    institution: string;
+    degree: string;
+    field: string;
+    graduationDate: string;
+    gpa?: string;
+    relevantCourses?: string[];
+  }>;
+  projects?: Array<{
+    name: string;
+    description: string;
+    technologies: string[];
+    url?: string;
+  }>;
+  certifications?: Array<{
+    name: string;
+    issuer: string;
+    date: string;
+    url?: string;
+  }>;
+  metadata: {
+    yearsOfExperience: number;
+    seniorityLevel: string;
+    primaryDomain: string;
+    keyTechnologies: string[];
+    lastUpdated?: string;
+  };
+}
