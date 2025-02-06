@@ -33,7 +33,7 @@ export async function handleConfigureInterviewCallback(
     metadata: {
       title: interviewPlan.systemPromptMetadata.title,
       description: interviewPlan.systemPromptMetadata.description,
-      tag: interviewPlan.systemPromptMetadata.tag,
+      tag: ["mcp_systemprompt_interview", "interview"],
     },
   };
   await sendJsonResultNotification(JSON.stringify(blockData));
@@ -41,6 +41,7 @@ export async function handleConfigureInterviewCallback(
   // Save to SystemPrompt as a block with correct types
   const systemprompt = SystemPromptService.getInstance();
   await systemprompt.createBlock(blockData);
+  server.sendResourceListChanged();
 
   const message = `Successfully created interview plan ${interviewPlan.interviewId} with ${interviewPlan.metadata.totalQuestions} questions`;
   await sendOperationNotification("configure_interview", message);
@@ -78,13 +79,12 @@ export async function handleSummarizeCVCallback(result: CreateMessageResult): Pr
     metadata: {
       title: cvSummary.systemPromptMetadata.title,
       description: cvSummary.systemPromptMetadata.description,
-      tag: cvSummary.systemPromptMetadata.tag,
+      tag: ["mcp_systemprompt_interview", "cv"],
     },
   };
 
   await sendJsonResultNotification(JSON.stringify(blockData));
 
-  // Save to SystemPrompt as a block
   const systemprompt = SystemPromptService.getInstance();
   await systemprompt.createBlock(blockData);
   server.sendResourceListChanged();

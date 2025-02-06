@@ -8,24 +8,34 @@ import { SystemPromptService } from "../services/systemprompt-service.js";
 import {
   mapBlockToReadResourceResult,
   mapBlocksToListResourcesResult,
-  mapAgentsToListResourcesResult,
-  mapAgentToReadResourceResult,
 } from "../utils/mcp-mappers.js";
+
+interface ListResourcesFilter {
+  tags?: string[];
+}
+
+interface ListResourcesParams {
+  filter?: ListResourcesFilter;
+}
 
 export async function handleListResources(
   request: ListResourcesRequest,
 ): Promise<ListResourcesResult> {
   try {
     const service = SystemPromptService.getInstance();
-    const blocks = await service.listBlocks();
-    const agents = await service.listAgents();
+    const params = request.params as ListResourcesParams;
+
+    const blocks = await service.listBlocks(
+      params?.filter?.tags ? { tags: params.filter.tags } : undefined,
+    );
 
     const blockResources = mapBlocksToListResourcesResult(blocks);
-    const agentResources = mapAgentsToListResourcesResult(agents);
 
     return {
-      _meta: {},
-      resources: [...blockResources.resources, ...agentResources.resources],
+      _meta: {
+        timestamp: Date.now(),
+      },
+      resources: blockResources.resources,
     };
   } catch (error: any) {
     console.error("Failed to fetch resources:", error);
@@ -38,14 +48,17 @@ export async function handleListResources(
 export async function handleResourceCall(
   request: ReadResourceRequest,
 ): Promise<ReadResourceResult> {
+  if (!request.params?.uri) {
+    throw new Error("No URI provided in request params");
+  }
+
   try {
     const service = SystemPromptService.getInstance();
     const { uri } = request.params;
 
     const blockMatch = uri.match(/^resource:\/\/\/block\/(.+)$/);
-    const agentMatch = uri.match(/^resource:\/\/\/agent\/(.+)$/);
 
-    if (!blockMatch && !agentMatch) {
+    if (!blockMatch) {
       throw new Error(
         "Invalid resource URI format - expected resource:///block/{id} or resource:///agent/{id}",
       );
@@ -55,12 +68,7 @@ export async function handleResourceCall(
       const blockId = blockMatch[1];
       const block = await service.getBlock(blockId);
       return mapBlockToReadResourceResult(block);
-    } else if (agentMatch) {
-      const agentId = agentMatch[1];
-      const agent = await service.getAgent(agentId);
-      return mapAgentToReadResourceResult(agent);
     }
-
     throw new Error("Failed to process resource request");
   } catch (error: any) {
     console.error("Failed to fetch resource:", error);

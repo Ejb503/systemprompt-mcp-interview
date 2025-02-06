@@ -2,7 +2,7 @@ import { Implementation, ServerCapabilities } from "@modelcontextprotocol/sdk/ty
 
 export const serverConfig: Implementation = {
   name: "systemprompt-mcp-interview",
-  version: "1.0.0",
+  version: "1.0.5",
   metadata: {
     name: "System Prompt MCP Interview",
     description:

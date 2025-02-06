@@ -7,6 +7,7 @@ import type {
   SystempromptAgentResponse,
   SystempromptAgentRequest,
 } from "../types/index.js";
+import { sendJsonResultNotification } from "../handlers/notifications.js";
 
 export class SystemPromptService {
   private static instance: SystemPromptService | null = null;
@@ -58,6 +59,9 @@ export class SystemPromptService {
         headers: {
           "Content-Type": "application/json",
           "api-key": this.apiKey,
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
           ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -148,8 +152,7 @@ export class SystemPromptService {
     if (options.tags?.length) {
       params.set("tag", options.tags.join(","));
     } else {
-      // Default to 'mcp-systemprompt-interview' tag if no tags specified
-      params.set("tag", "mcp-systemprompt-interview");
+      params.set("tag", "mcp_systemprompt_interview");
     }
 
     if (options.status) params.set("status", options.status);
@@ -160,14 +163,22 @@ export class SystemPromptService {
     if (options.sortDirection) params.set("sort_direction", options.sortDirection);
 
     const queryString = params.toString();
-    return this.request<SystempromptBlockResponse[]>(
-      "GET",
-      `/block${queryString ? `?${queryString}` : ""}`,
-    );
+    const url = `/block${queryString ? `?${queryString}` : ""}`;
+
+    // Add notification to log the full URL
+    const fullUrl = `${this.baseUrl}${url}`;
+    await sendJsonResultNotification(`Requesting SystemPrompt URL: ${fullUrl}`);
+
+    // Add cache-busting headers to the request
+    return this.request<SystempromptBlockResponse[]>("GET", url, undefined, {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
   }
 
   async getBlock(blockId: string): Promise<SystempromptBlockResponse> {
-    return this.request<SystempromptBlockResponse>("GET", `/block/${blockId}`);
+    return this.request<SystempromptBlockResponse>("GET", `/block/${blockId}?t=${Date.now()}`);
   }
 
   async getAgent(agentId: string): Promise<SystempromptAgentResponse> {

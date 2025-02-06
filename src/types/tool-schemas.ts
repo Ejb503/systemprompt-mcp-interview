@@ -37,6 +37,7 @@ export interface ListInterviewsArgs {
   candidateId: string;
   status?: "scheduled" | "completed" | "in_progress";
   maxResults?: number;
+  limit?: number;
 }
 
 export interface SaveInterviewArgs {
@@ -109,4 +110,12 @@ export interface CVSummary {
     keyTechnologies: string[];
     lastUpdated?: string;
   };
+}
+
+export interface InitiateInterviewArgs {
+  interviewUri: string;
+}
+
+export interface ListCVsArgs {
+  limit?: number;
 }

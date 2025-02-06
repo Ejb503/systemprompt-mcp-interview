@@ -51,4 +51,46 @@ export const TOOLS: Tool[] = [
       required: ["cv"],
     },
   },
+  {
+    name: "initiate_interview",
+    description: "Initiate an interview using a configured interview resource.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        interviewUri: {
+          type: "string",
+          description:
+            "URI of the configured interview resource. Must be a valid resource URI in format `resource:///block/6a84a378-bcf6-44e5-a14c-027219521f38`",
+        },
+      },
+      required: ["interviewUri"],
+    },
+  },
+  {
+    name: "list_interviews",
+    description: "List all available interview configurations.",
+    inputSchema: {
+      type: "object",
+
+      properties: {
+        limit: {
+          type: "number",
+          description: "Maximum number of interviews to return",
+        },
+      },
+    },
+  },
+  {
+    name: "list_cvs",
+    description: "List all available CV resources.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "number",
+          description: "Maximum number of CVs to return",
+        },
+      },
+    },
+  },
 ];
