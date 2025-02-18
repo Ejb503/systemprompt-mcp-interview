@@ -47,10 +47,10 @@ export interface SaveInterviewArgs {
 }
 
 export interface ConfigureInterviewArgs {
-  title: string; // Job title
-  description: string; // Job description
-  cv: string; // CV resource URI
-  notes?: string; // Additional context/notes
+  title: string;
+  description: string;
+  cv: string;
+  notes?: string;
 }
 
 export interface SummarizeCVArgs {

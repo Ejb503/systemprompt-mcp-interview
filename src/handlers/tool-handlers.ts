@@ -28,69 +28,51 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
       case "configure_interview": {
         const { title, description, notes, cv } = request.params
           .arguments as unknown as ConfigureInterviewArgs;
+        const prompt = await handleGetPrompt({
+          method: "prompts/get",
+          params: {
+            name: CONFIGURE_INTERVIEW_PROMPT.name,
+            arguments: { title, description, notes: notes ?? "", cv },
+          },
+        });
 
-        try {
-          const resource = await handleResourceCall({
-            method: "resources/read",
-            params: {
-              uri: cv,
-            },
-          });
-
-          if (!resource?.contents?.[0]?.text) {
-            throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} Invalid CV resource format`);
-          }
-
-          const cvSummary = resource.contents[0].text as string;
-          const prompt = await handleGetPrompt({
-            method: "prompts/get",
-            params: {
-              name: CONFIGURE_INTERVIEW_PROMPT.name,
-              arguments: { title, description, notes: notes ?? "", cv: cvSummary },
-            },
-          });
-
-          const responseSchema = prompt._meta?.responseSchema;
-          if (!responseSchema) {
-            throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} No response schema found`);
-          }
-
-          await sendSamplingRequest({
-            method: "sampling/createMessage",
-            params: {
-              messages: CONFIGURE_INTERVIEW_PROMPT.messages.map((msg) =>
-                injectVariables(msg, {
-                  title,
-                  description,
-                  notes: notes ?? "",
-                  cv: cvSummary,
-                }),
-              ) as Array<{
-                role: "user" | "assistant";
-                content: { type: "text"; text: string };
-              }>,
-              maxTokens: 100000,
-              temperature: 0.7,
-              _meta: {
-                callback: "configure_interview",
-                responseSchema: responseSchema,
-              },
-              arguments: { title, description, notes: notes ?? "", cv: cvSummary },
-            },
-          });
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Interview configuration started, please wait...",
-              },
-            ],
-          };
-        } catch (error) {
-          console.error(`Error configuring interview: ${error}`);
-          throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} ${error}`);
+        const responseSchema = prompt._meta?.responseSchema;
+        if (!responseSchema) {
+          throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} No response schema found`);
         }
+
+        await sendSamplingRequest({
+          method: "sampling/createMessage",
+          params: {
+            messages: CONFIGURE_INTERVIEW_PROMPT.messages.map((msg) =>
+              injectVariables(msg, {
+                title,
+                description,
+                notes: notes ?? "",
+                cv,
+              }),
+            ) as Array<{
+              role: "user" | "assistant";
+              content: { type: "text"; text: string };
+            }>,
+            maxTokens: 100000,
+            temperature: 0.7,
+            _meta: {
+              callback: "configure_interview",
+              responseSchema: responseSchema,
+            },
+            arguments: { title, description, notes: notes ?? "", cv },
+          },
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Interview configuration started, please wait...",
+            },
+          ],
+        };
       }
 
       case "summarize_cv": {
@@ -196,7 +178,6 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
           throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} ${error}`);
         }
       }
-
       case "list_cvs": {
         try {
           const resources = await handleListResources({
@@ -224,7 +205,6 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
           throw new Error(`${TOOL_ERROR_MESSAGES.TOOL_CALL_FAILED} ${error}`);
         }
       }
-
       default:
         throw new Error(`${TOOL_ERROR_MESSAGES.UNKNOWN_TOOL} ${request.params.name}`);
     }

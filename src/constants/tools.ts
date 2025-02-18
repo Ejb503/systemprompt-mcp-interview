@@ -19,7 +19,7 @@ export const TOOLS: Tool[] = [
         cv: {
           type: "string",
           description:
-            "ID of the LLM summarized CV of the candidate. Must be a valid resource URI in format `resource:///block/6a84a378-bcf6-44e5-a14c-027219521f38`",
+            "The CV of the candidate. For best results, paste the results of the summarize CV tool.",
         },
         description: {
           type: "string",

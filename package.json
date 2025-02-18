@@ -1,6 +1,6 @@
 {
   "name": "systemprompt-mcp-interview",
-  "version": "1.0.6",
+  "version": "1.0.12",
   "description": "A specialized Model Context Protocol (MCP) server that enables AI-powered interview roleplay scenarios",
   "type": "module",
   "bin": {
