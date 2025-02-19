@@ -12,40 +12,47 @@ import { InterviewPlanResponse, CVSummaryResponse } from "../types/sampling-sche
 export async function handleConfigureInterviewCallback(
   result: CreateMessageResult,
 ): Promise<string> {
-  if (result.content.type !== "text") {
-    throw new Error("Expected text content");
+  try {
+    if (result.content.type !== "text") {
+      throw new Error("Expected text content");
+    }
+
+    const interviewPlan = JSON.parse(result.content.text) as InterviewPlanResponse;
+
+    if (
+      !interviewPlan.interviewId ||
+      !interviewPlan.interviewPlan ||
+      !interviewPlan.metadata ||
+      !interviewPlan.systemPromptMetadata
+    ) {
+      throw new Error("Invalid interview plan format");
+    }
+    const blockData = {
+      content: result.content.text,
+      prefix: interviewPlan.systemPromptMetadata.prefix,
+      metadata: {
+        title: interviewPlan.systemPromptMetadata.title,
+        description: interviewPlan.systemPromptMetadata.description,
+        tag: ["mcp_systemprompt_interview", "interview"],
+      },
+    };
+    await sendJsonResultNotification(JSON.stringify(blockData));
+
+    const systemprompt = SystemPromptService.getInstance();
+    await systemprompt.createBlock(blockData);
+    server.sendResourceListChanged();
+
+    const message = `Successfully created interview plan ${interviewPlan.interviewId} with ${interviewPlan.metadata.totalQuestions} questions`;
+    await sendOperationNotification("configure_interview", message);
+    return message;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await sendOperationNotification(
+      "configure_interview",
+      `Failed to configure interview: ${errorMessage}`,
+    );
+    throw error;
   }
-
-  const interviewPlan = JSON.parse(result.content.text) as InterviewPlanResponse;
-
-  if (
-    !interviewPlan.interviewId ||
-    !interviewPlan.interviewPlan ||
-    !interviewPlan.metadata ||
-    !interviewPlan.systemPromptMetadata
-  ) {
-    throw new Error("Invalid interview plan format");
-  }
-
-  const blockData = {
-    content: result.content.text,
-    prefix: interviewPlan.systemPromptMetadata.prefix,
-    metadata: {
-      title: interviewPlan.systemPromptMetadata.title,
-      description: interviewPlan.systemPromptMetadata.description,
-      tag: ["mcp_systemprompt_interview", "interview"],
-    },
-  };
-  await sendJsonResultNotification(JSON.stringify(blockData));
-
-  // Save to SystemPrompt as a block with correct types
-  const systemprompt = SystemPromptService.getInstance();
-  await systemprompt.createBlock(blockData);
-  server.sendResourceListChanged();
-
-  const message = `Successfully created interview plan ${interviewPlan.interviewId} with ${interviewPlan.metadata.totalQuestions} questions`;
-  await sendOperationNotification("configure_interview", message);
-  return message;
 }
 
 /**

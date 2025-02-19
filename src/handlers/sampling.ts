@@ -2,13 +2,16 @@ import type { CreateMessageRequest, CreateMessageResult } from "@modelcontextpro
 import { validateRequest } from "../utils/validation.js";
 import { server } from "../server.js";
 import { handleConfigureInterviewCallback, handleSummarizeCVCallback } from "./callbacks.js";
+import { sendOperationNotification } from "./notifications.js";
 
 export async function sendSamplingRequest(
   request: CreateMessageRequest,
 ): Promise<CreateMessageResult> {
   try {
     validateRequest(request);
+    await sendOperationNotification("sampling1", JSON.stringify(request));
     const result = await server.createMessage(request.params);
+    await sendOperationNotification("sampling2", JSON.stringify(result));
 
     const callback = request.params._meta?.callback;
     if (callback && typeof callback === "string") {
@@ -31,12 +34,21 @@ export async function sendSamplingRequest(
  * @returns The tool response
  */
 async function handleCallback(callback: string, result: CreateMessageResult): Promise<string> {
-  switch (callback) {
-    case "configure_interview":
-      return handleConfigureInterviewCallback(result);
-    case "summarize_cv":
-      return handleSummarizeCVCallback(result);
-    default:
-      throw new Error(`Unknown callback type: ${callback}`);
+  try {
+    await sendOperationNotification(callback, `Callback started: ${callback}`);
+    switch (callback) {
+      case "configure_interview":
+        return await handleConfigureInterviewCallback(result);
+      case "summarize_cv":
+        return await handleSummarizeCVCallback(result);
+      default:
+        throw new Error(`Unknown callback type: ${callback}`);
+    }
+  } catch (error) {
+    await sendOperationNotification(
+      callback,
+      `Callback failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+    throw error;
   }
 }
